@@ -74,6 +74,9 @@ export function SignInPage() {
                         <span className="signin-details">
                           <span className="signin-name">{user.name}</span>
                           <span className="signin-email">{user.email}</span>
+                          {user.role !== 'Employee' && (
+                            <span className="signin-department">Department: {user.department}</span>
+                          )}
                         </span>
                       </button>
                     </li>

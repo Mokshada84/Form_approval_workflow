@@ -73,6 +73,7 @@ export function StageList({ form }: { form: FormRequest }) {
                   ? 'Awaiting decision'
                   : 'Not yet reached'
                 : `${stage.decision === 'approved' ? 'Approved' : 'Rejected'} by ${stage.decidedByName}`}
+              {stage.rejectionComment && <span className="rejection-comment">Comment: {stage.rejectionComment}</span>}
             </span>
           </li>
         )

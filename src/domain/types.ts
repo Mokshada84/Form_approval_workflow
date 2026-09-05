@@ -6,6 +6,8 @@
 /** The three kinds of account. */
 export type Role = 'Employee' | 'Manager' | 'Senior Manager'
 
+export type Department = 'Legal' | 'Finance' | 'IT'
+
 /** The two roles that can approve. `Exclude` removes 'Employee' from Role. */
 export type ApproverRole = Exclude<Role, 'Employee'>
 
@@ -14,6 +16,7 @@ export type User = {
   name: string
   email: string
   role: Role
+  department: Department
 }
 
 /** Where one approval stage has got to. */
@@ -26,10 +29,19 @@ export type StageDecision = 'pending' | 'approved' | 'rejected'
  */
 export type ApprovalStage = {
   role: ApproverRole
+  department: Department
   decision: StageDecision
   decidedById: string | null
   decidedByName: string | null
   decidedAt: string | null
+  rejectionComment: string | null
+}
+
+export type ReceiptAttachment = {
+  name: string
+  type: string
+  size: number
+  dataUrl: string
 }
 
 /**
@@ -48,6 +60,9 @@ export type FormRequest = {
   /** What the form is called, typed by the submitter. */
   name: string
   amount: number
+  department: Department
+  expenseType: string
+  receipt: ReceiptAttachment | null
   submitterId: string
   submitterName: string
   createdAt: string
@@ -61,4 +76,7 @@ export type FormRequest = {
 export type NewFormInput = {
   name: string
   amount: number
+  department: Department
+  expenseType: string
+  receipt: ReceiptAttachment | null
 }

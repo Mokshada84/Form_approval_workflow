@@ -33,6 +33,7 @@ export function FormCard({ form, showSubmitter = false, children }: FormCardProp
           <h3 className="form-name">{form.name}</h3>
           <p className="form-meta">
             {showSubmitter && <>Submitted by {form.submitterName} · </>}
+            {form.department} · {form.expenseType} ·{' '}
             {form.submittedAt === null
               ? `Created ${formatDate(form.createdAt)}`
               : `Submitted ${formatDate(form.submittedAt)}`}
@@ -47,6 +48,15 @@ export function FormCard({ form, showSubmitter = false, children }: FormCardProp
 
       <ApprovalMeter form={form} />
       <StageList form={form} />
+
+      {form.receipt && (
+        <div className="receipt">
+          <strong>Receipt:</strong>{' '}
+          <a href={form.receipt.dataUrl} download={form.receipt.name} target="_blank" rel="noreferrer">
+            {form.receipt.name}
+          </a>
+        </div>
+      )}
 
       {/* Only render the footer if this page actually passed any buttons in. */}
       {children && <footer className="form-card-footer">{children}</footer>}

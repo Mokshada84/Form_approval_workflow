@@ -14,8 +14,9 @@ import { ApprovalsPage } from './ApprovalsPage'
 import { MyFormsPage } from './MyFormsPage'
 import { NewFormPage } from './NewFormPage'
 import { SignInPage } from './SignInPage'
+import { AuditPage } from './AuditPage'
 
-type Tab = 'new' | 'mine' | 'approvals'
+type Tab = 'new' | 'mine' | 'approvals' | 'audit'
 
 export function App() {
   const { currentUser, forms, signOut } = useApp()
@@ -30,6 +31,7 @@ export function App() {
   // Employees don't approve, so they never see the tab. The page itself is
   // also never rendered for them, so hiding the tab isn't the only guard.
   const canApprove = currentUser.role !== 'Employee'
+  const canAudit = currentUser.role === 'Senior Manager'
   const awaitingCount = canApprove ? formsAwaiting(forms, currentUser).length : 0
 
   return (
@@ -92,6 +94,17 @@ export function App() {
             {awaitingCount > 0 && <span className="tab-count">{awaitingCount}</span>}
           </button>
         )}
+        {canAudit && (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'audit'}
+            className={`tab${tab === 'audit' ? ' tab-active' : ''}`}
+            onClick={() => setTab('audit')}
+          >
+            Audit trail
+          </button>
+        )}
         </nav>
 
         <main className="content">
@@ -100,6 +113,7 @@ export function App() {
           {/* The `canApprove &&` matters: it stops an Employee reaching this
               page even if the tab state were somehow set to 'approvals'. */}
           {tab === 'approvals' && canApprove && <ApprovalsPage />}
+          {tab === 'audit' && canAudit && <AuditPage />}
         </main>
       </div>
     </div>

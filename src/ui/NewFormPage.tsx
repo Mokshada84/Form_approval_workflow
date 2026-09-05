@@ -7,6 +7,10 @@
 // for it here.
 
 import { useState } from 'react'
+import type { ChangeEvent } from 'react'
+import { DEPARTMENTS } from '../data/users'
+import { EXPENSE_CATEGORIES } from '../data/expenseCategories'
+import type { Department, ReceiptAttachment } from '../domain/types'
 import { SENIOR_APPROVAL_THRESHOLD } from '../domain/workflow'
 import { useApp } from '../state/useApp'
 
@@ -17,16 +21,20 @@ export function NewFormPage() {
   // an empty box impossible to represent, and half-typed values like "12." turn
   // into NaN. It's converted to a number only when the form is submitted.
   const [amount, setAmount] = useState('')
+  const [department, setDepartment] = useState<Department>(currentUser?.department ?? 'Finance')
+  const [expenseType, setExpenseType] = useState(EXPENSE_CATEGORIES[currentUser?.department ?? 'Finance'][0])
+  const [receipt, setReceipt] = useState<ReceiptAttachment | null>(null)
   const [error, setError] = useState('')
   const [confirmation, setConfirmation] = useState('')
 
   if (currentUser === null) return null
+  const signedInUser = currentUser
 
   /**
    * Shared by both buttons. Returns the cleaned-up values, or null if
    * something is wrong (having already shown the error).
    */
-  function validate(): { name: string; amount: number } | null {
+  function validate(): { name: string; amount: number; department: Department; expenseType: string; receipt: ReceiptAttachment | null } | null {
     const trimmedName = name.trim()
     if (trimmedName === '') {
       setError('Give the form a name.')
@@ -44,12 +52,26 @@ export function NewFormPage() {
       return null
     }
 
-    return { name: trimmedName, amount: parsedAmount }
+    return { name: trimmedName, amount: parsedAmount, department, expenseType, receipt }
+  }
+
+  function handleReceipt(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    if (file === undefined) return
+    const reader = new FileReader()
+    reader.addEventListener('load', () => {
+      if (typeof reader.result !== 'string') return
+      setReceipt({ name: file.name, type: file.type, size: file.size, dataUrl: reader.result })
+    })
+    reader.readAsDataURL(file)
   }
 
   function reset(message: string) {
     setName('')
     setAmount('')
+    setDepartment(signedInUser.department)
+    setExpenseType(EXPENSE_CATEGORIES[signedInUser.department][0])
+    setReceipt(null)
     setError('')
     setConfirmation(message)
   }
@@ -92,6 +114,42 @@ export function NewFormPage() {
           onChange={(event) => setName(event.target.value)}
           placeholder="e.g. Laptop replacement"
         />
+      </div>
+
+      <div className="field">
+        <label htmlFor="form-department">Department</label>
+        <select
+          id="form-department"
+          value={department}
+          onChange={(event) => setDepartment(event.target.value as Department)}
+        >
+          {DEPARTMENTS.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="field">
+        <label htmlFor="form-expense-type">Expense type</label>
+        <select
+          id="form-expense-type"
+          value={expenseType}
+          onChange={(event) => setExpenseType(event.target.value)}
+        >
+          {EXPENSE_CATEGORIES[department].map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="field">
+        <label htmlFor="form-receipt">Receipt attachment (optional)</label>
+        <input id="form-receipt" type="file" accept="image/*,.pdf" onChange={handleReceipt} />
+        {receipt && <span className="field-hint">Attached: {receipt.name}</span>}
       </div>
 
       <div className="field">

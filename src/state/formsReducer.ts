@@ -23,7 +23,13 @@ export type Action =
   | { type: 'form-created-and-submitted'; input: NewFormInput; user: User }
   | { type: 'draft-submitted'; formId: string }
   | { type: 'draft-deleted'; formId: string }
-  | { type: 'decided'; formId: string; user: User; decision: 'approved' | 'rejected' }
+  | {
+      type: 'decided'
+      formId: string
+      user: User
+      decision: 'approved' | 'rejected'
+      rejectionComment?: string
+    }
 
 export function formsReducer(state: StoredData, action: Action): StoredData {
   switch (action.type) {
@@ -63,7 +69,7 @@ export function formsReducer(state: StoredData, action: Action): StoredData {
             // The real rule lives in the domain layer. `decide` returns the
             // form unchanged if this user isn't allowed to decide it, so the
             // "no approving your own form" rule is enforced here too.
-            ? decide(form, action.user, action.decision)
+            ? decide(form, action.user, action.decision, new Date(), action.rejectionComment)
             : form,
         ),
       }

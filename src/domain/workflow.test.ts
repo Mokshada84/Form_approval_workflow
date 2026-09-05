@@ -12,22 +12,24 @@ import {
   decide,
   decisionsBy,
   formatFormNumber,
+  formsForAudit,
   formsAwaiting,
   getActiveStage,
   getStatus,
+  pendingHours,
   submitForm,
 } from './workflow'
 import type { User } from './types'
 
-const employee: User = { id: 'emp-1', name: 'Dan Okafor', email: 'd@x.com', role: 'Employee' }
-const manager: User = { id: 'mgr-1', name: 'Priya Sharma', email: 'p@x.com', role: 'Manager' }
-const otherManager: User = { id: 'mgr-2', name: 'Tom Becker', email: 't@x.com', role: 'Manager' }
-const senior: User = { id: 'snr-1', name: 'Mei Tan', email: 'm@x.com', role: 'Senior Manager' }
-const otherSenior: User = { id: 'snr-2', name: 'Alex Reid', email: 'a@x.com', role: 'Senior Manager' }
+const employee: User = { id: 'emp-1', name: 'Dan Okafor', email: 'd@x.com', role: 'Employee', department: 'Finance' }
+const manager: User = { id: 'mgr-1', name: 'Priya Sharma', email: 'p@x.com', role: 'Manager', department: 'Finance' }
+const otherManager: User = { id: 'mgr-2', name: 'Tom Becker', email: 't@x.com', role: 'Manager', department: 'Finance' }
+const senior: User = { id: 'snr-1', name: 'Mei Tan', email: 'm@x.com', role: 'Senior Manager', department: 'Finance' }
+const otherSenior: User = { id: 'snr-2', name: 'Alex Reid', email: 'a@x.com', role: 'Senior Manager', department: 'Finance' }
 
 /** A submitted form for the given amount, raised by the given person. */
 function submitted(amount: number, by: User = employee) {
-  return submitForm(createDraft({ name: 'Laptop replacement', amount }, by, 1))
+  return submitForm(createDraft({ name: 'Laptop replacement', amount, department: by.department, expenseType: 'Laptop', receipt: null }, by, 1))
 }
 
 describe('form numbers', () => {
@@ -50,11 +52,15 @@ describe('routing by amount', () => {
     expect(buildStages(1000.01).map((s) => s.role)).toEqual(['Manager', 'Senior Manager'])
     expect(buildStages(5000).map((s) => s.role)).toEqual(['Manager', 'Senior Manager'])
   })
+
+  it('routes every approval stage to the selected department', () => {
+    expect(buildStages(5000, 'IT').map((stage) => stage.department)).toEqual(['IT', 'IT'])
+  })
 })
 
 describe('status', () => {
   it('is Draft until the form is submitted', () => {
-    const draft = createDraft({ name: 'Laptop', amount: 500 }, employee, 1)
+    const draft = createDraft({ name: 'Laptop', amount: 500, department: employee.department, expenseType: 'Laptop', receipt: null }, employee, 1)
 
     expect(getStatus(draft)).toBe('Draft')
     // A draft has no approval stages: routing happens at submission.
@@ -120,6 +126,13 @@ describe('approval is sequential', () => {
 
     expect(canDecide(form, senior)).toBe(true)
   })
+
+  it('does not allow an approver from another department to decide', () => {
+    const itManager: User = { ...otherManager, id: 'mgr-it', department: 'IT' }
+    const form = submitted(500)
+
+    expect(canDecide(form, itManager)).toBe(false)
+  })
 })
 
 describe('nobody approves their own form', () => {
@@ -173,6 +186,29 @@ describe('decide', () => {
 
     // The original must be untouched — React relies on this to spot changes.
     expect(form.stages[0].decision).toBe('pending')
+  })
+
+  it('stores a rejection comment for the submitter', () => {
+    const after = decide(submitted(500), manager, 'rejected', new Date('2026-09-06T10:30:00.000Z'), 'Missing invoice')
+
+    expect(after.stages[0].rejectionComment).toBe('Missing invoice')
+  })
+})
+
+describe('receipts and audit helpers', () => {
+  it('keeps a receipt on the submitted form', () => {
+    const receipt = { name: 'receipt.pdf', type: 'application/pdf', size: 12, dataUrl: 'data:application/pdf;base64,abc' }
+    const form = submitForm(createDraft({ name: 'Laptop', amount: 500, department: 'Finance', expenseType: 'Travel', receipt }, employee, 1))
+
+    expect(form.receipt).toEqual(receipt)
+  })
+
+  it('lets a senior manager audit their department and reports pending hours', () => {
+    const financeForm = submitForm(createDraft({ name: 'Laptop', amount: 500, department: 'Finance', expenseType: 'Laptop', receipt: null }, employee, 1), new Date('2026-09-06T08:00:00.000Z'))
+    const itForm = submitForm(createDraft({ name: 'Server repair', amount: 500, department: 'IT', expenseType: 'Laptop', receipt: null }, employee, 2), new Date('2026-09-06T08:00:00.000Z'))
+
+    expect(formsForAudit([financeForm, itForm], senior)).toEqual([financeForm])
+    expect(pendingHours(financeForm, new Date('2026-09-06T11:00:00.000Z'))).toBe(3)
   })
 })
 

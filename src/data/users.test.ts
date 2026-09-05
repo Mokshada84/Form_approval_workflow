@@ -21,6 +21,10 @@ describe('the dummy directory', () => {
     expect(new Set(ids).size).toBe(ids.length)
   })
 
+  it('links every user to one of the supported departments', () => {
+    expect(new Set(USERS.map((user) => user.department))).toEqual(new Set(['Legal', 'Finance', 'IT']))
+  })
+
   it('gives everyone a distinct name', () => {
     const names = USERS.map((user) => user.name)
     expect(new Set(names).size).toBe(names.length)

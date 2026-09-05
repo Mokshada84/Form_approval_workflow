@@ -11,6 +11,7 @@ import type {
   FormRequest,
   FormStatus,
   NewFormInput,
+  Department,
   User,
 } from './types'
 
@@ -29,18 +30,26 @@ export function formatFormNumber(sequence: number): string {
 }
 
 /** A fresh, undecided stage for the given role. */
-function pendingStage(role: ApproverRole): ApprovalStage {
-  return { role, decision: 'pending', decidedById: null, decidedByName: null, decidedAt: null }
+function pendingStage(role: ApproverRole, department: Department): ApprovalStage {
+  return {
+    role,
+    department,
+    decision: 'pending',
+    decidedById: null,
+    decidedByName: null,
+    decidedAt: null,
+    rejectionComment: null,
+  }
 }
 
 /**
  * Work out which approvals a form needs, from its amount. This is the routing
  * rule, and it lives in exactly one place.
  */
-export function buildStages(amount: number): ApprovalStage[] {
-  const stages: ApprovalStage[] = [pendingStage('Manager')]
+export function buildStages(amount: number, department: Department = 'Finance'): ApprovalStage[] {
+  const stages: ApprovalStage[] = [pendingStage('Manager', department)]
   if (amount > SENIOR_APPROVAL_THRESHOLD) {
-    stages.push(pendingStage('Senior Manager'))
+    stages.push(pendingStage('Senior Manager', department))
   }
   return stages
 }
@@ -63,6 +72,9 @@ export function createDraft(
     number: formatFormNumber(sequence),
     name: input.name,
     amount: input.amount,
+    department: input.department,
+    expenseType: input.expenseType,
+    receipt: input.receipt,
     submitterId: submitter.id,
     submitterName: submitter.name,
     createdAt: now.toISOString(),
@@ -83,7 +95,7 @@ export function submitForm(form: FormRequest, now: Date = new Date()): FormReque
   return {
     ...form,
     submittedAt: now.toISOString(),
-    stages: buildStages(form.amount),
+    stages: buildStages(form.amount, form.department),
   }
 }
 
@@ -134,6 +146,7 @@ export function canDecide(form: FormRequest, user: User): boolean {
   const stage = getActiveStage(form)
   if (stage === null) return false
   if (stage.role !== user.role) return false
+  if (stage.department !== user.department) return false
   if (form.submitterId === user.id) return false
   return true
 }
@@ -150,6 +163,7 @@ export function decide(
   user: User,
   decision: 'approved' | 'rejected',
   now: Date = new Date(),
+  rejectionComment = '',
 ): FormRequest {
   if (!canDecide(form, user)) return form
 
@@ -165,6 +179,7 @@ export function decide(
             decidedById: user.id,
             decidedByName: user.name,
             decidedAt: now.toISOString(),
+            rejectionComment: decision === 'rejected' ? rejectionComment.trim() : null,
           }
         : stage,
     ),
@@ -209,4 +224,16 @@ export function decisionsBy(
   // Sort newest first. decidedAt is always set on a decided stage, but the ?? ''
   // keeps TypeScript happy about the null case.
   return decisions.sort((a, b) => (b.stage.decidedAt ?? '').localeCompare(a.stage.decidedAt ?? ''))
+}
+
+/** Senior managers can audit only forms from their own department. */
+export function formsForAudit(forms: FormRequest[], user: User): FormRequest[] {
+  if (user.role !== 'Senior Manager') return []
+  return forms.filter((form) => form.department === user.department)
+}
+
+/** How long a submitted form has been pending, in whole hours. */
+export function pendingHours(form: FormRequest, now: Date = new Date()): number | null {
+  if (getStatus(form) !== 'Under review' || form.submittedAt === null) return null
+  return Math.max(0, Math.floor((now.getTime() - Date.parse(form.submittedAt)) / 3_600_000))
 }

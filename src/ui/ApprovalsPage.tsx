@@ -6,16 +6,18 @@
 //   1. Awaiting your decision — forms this person can act on right now.
 //   2. Your decisions — everything they have personally approved or rejected.
 
-import { decisionsBy, formsAwaiting } from '../domain/workflow'
+import { decisionsBy, formsAwaiting, getStatus } from '../domain/workflow'
+import { useState } from 'react'
 import { useApp } from '../state/useApp'
 import { FormCard } from './FormCard'
 import { formatAmount } from './format'
 import { StatTiles } from './StatTiles'
 import { StatusBadge } from './StatusBadge'
-import { getStatus } from '../domain/workflow'
 
 export function ApprovalsPage() {
   const { currentUser, forms, dispatch } = useApp()
+  const [rejectingFormId, setRejectingFormId] = useState<string | null>(null)
+  const [rejectionComment, setRejectionComment] = useState('')
   if (currentUser === null) return null
 
   // Both lists come from the domain layer. formsAwaiting uses canDecide, which
@@ -66,16 +68,40 @@ export function ApprovalsPage() {
                   type="button"
                   className="btn btn-danger btn-small"
                   onClick={() =>
-                    dispatch({
-                      type: 'decided',
-                      formId: form.id,
-                      user: currentUser,
-                      decision: 'rejected',
-                    })
+                    setRejectingFormId(form.id)
                   }
                 >
                   Reject
                 </button>
+                {rejectingFormId === form.id && (
+                  <div className="rejection-editor">
+                    <label htmlFor={`rejection-${form.id}`}>Reason for rejection</label>
+                    <textarea
+                      id={`rejection-${form.id}`}
+                      value={rejectionComment}
+                      onChange={(event) => setRejectionComment(event.target.value)}
+                      required
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-danger btn-small"
+                      disabled={rejectionComment.trim() === ''}
+                      onClick={() => {
+                        dispatch({
+                          type: 'decided',
+                          formId: form.id,
+                          user: currentUser,
+                          decision: 'rejected',
+                          rejectionComment,
+                        })
+                        setRejectingFormId(null)
+                        setRejectionComment('')
+                      }}
+                    >
+                      Confirm rejection
+                    </button>
+                  </div>
+                )}
               </FormCard>
             ))}
           </div>

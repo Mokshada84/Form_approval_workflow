@@ -214,9 +214,15 @@ body {
 }
 
 .signin-email,
-.signin-role-note {
+.signin-role-note,
+.signin-department {
   font-size: 12px;
   color: var(--text-muted);
+}
+
+.signin-department {
+  color: var(--text-secondary);
+  font-weight: 600;
 }
 
 /* ---------- Role badges ---------- */
@@ -477,6 +483,24 @@ body {
   box-shadow: 0 0 0 3px var(--accent-ring);
 }
 
+.field select,
+.field textarea {
+  width: 100%;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 9px 11px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.field-hint,
+.rejection-comment {
+  display: block;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
 .routing-hint {
   margin: 0 0 16px;
   padding: 10px 14px;
@@ -690,6 +714,34 @@ body {
   margin-top: 14px;
   padding-top: 14px;
   border-top: 1px solid var(--border);
+}
+
+.receipt {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.receipt a {
+  color: var(--accent-hover);
+}
+
+.rejection-editor {
+  display: grid;
+  gap: 7px;
+  flex-basis: 100%;
+  margin-top: 10px;
+}
+
+.rejection-editor textarea {
+  min-height: 72px;
+  resize: vertical;
+  font: inherit;
+}
+
+.audit-table {
+  min-width: 900px;
 }
 
 /* ---------- Approval trail ---------- */

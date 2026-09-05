@@ -59,6 +59,8 @@ describe('sign-on', () => {
     expect(screen.getByText('Choose an account to sign in as.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Dan Okafor/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Priya Sharma/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Priya Sharma.*Finance/s })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Mei Tan.*Finance/s })).toBeInTheDocument()
   })
 
   it('signs a user in and back out again', async () => {
@@ -114,6 +116,29 @@ describe('what each role can see', () => {
 })
 
 describe('submitting a form', () => {
+  it('offers every department and shows an uploaded receipt on My forms', async () => {
+    const user = userEvent.setup()
+    renderApp()
+    await signInAs(user, 'Dan Okafor')
+
+    expect(screen.getByRole('option', { name: 'Legal' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Finance' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'IT' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Travel' })).toBeInTheDocument()
+    await user.selectOptions(screen.getByLabelText('Department'), 'IT')
+    expect(screen.getByRole('option', { name: 'WiFi expenses' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'Travel' })).not.toBeInTheDocument()
+    const receipt = new File(['receipt'], 'receipt.pdf', { type: 'application/pdf' })
+    await user.upload(screen.getByLabelText('Receipt attachment (optional)'), receipt)
+    await user.type(screen.getByLabelText('Name of the form'), 'Server repair')
+    await user.type(screen.getByLabelText('Amount (USD)'), '750')
+    await user.click(screen.getByRole('button', { name: 'Submit for approval' }))
+    await user.click(screen.getByRole('tab', { name: 'My forms' }))
+
+    expect(screen.getByText('receipt.pdf')).toBeInTheDocument()
+    expect(screen.getByText('IT')).toBeInTheDocument()
+  })
+
   it('autogenerates the form number and shows it Under review', async () => {
     const user = userEvent.setup()
     renderApp()
@@ -265,6 +290,8 @@ describe('approving and rejecting', () => {
     await signInAs(user, 'Priya Sharma')
     await user.click(screen.getByRole('tab', { name: /Approvals/ }))
     await user.click(screen.getByRole('button', { name: 'Reject' }))
+    await user.type(screen.getByLabelText('Reason for rejection'), 'Please attach the invoice.')
+    await user.click(screen.getByRole('button', { name: 'Confirm rejection' }))
     await signOut(user)
 
     // It never reaches the Senior Manager.
@@ -276,6 +303,7 @@ describe('approving and rejecting', () => {
     await signInAs(user, 'Dan Okafor')
     await user.click(screen.getByRole('tab', { name: 'My forms' }))
     expect(screen.getByText('Rejected', { selector: '.status-label' })).toBeInTheDocument()
+    expect(screen.getByText('Please attach the invoice.')).toBeInTheDocument()
   })
 
   it('never puts a form in the submitter’s own approval queue', async () => {
@@ -317,5 +345,22 @@ describe('approving and rejecting', () => {
     await signInAs(user, 'Tom Becker')
     await user.click(screen.getByRole('tab', { name: /Approvals/ }))
     expect(screen.getByText("You haven't approved or rejected anything yet.")).toBeInTheDocument()
+  })
+})
+
+describe('senior manager audit', () => {
+  it('shows all submitted forms in the audit trail', async () => {
+    const user = userEvent.setup()
+    renderApp()
+    await signInAs(user, 'Dan Okafor')
+    await submitForm(user, 'Audit example', '750')
+    await signOut(user)
+
+    await signInAs(user, 'Mei Tan')
+    await user.click(screen.getByRole('tab', { name: 'Audit trail' }))
+
+    expect(screen.getByRole('table')).toHaveTextContent('FORM-0001')
+    expect(screen.getByRole('table')).toHaveTextContent('Under review')
+    expect(screen.getByRole('table')).toHaveTextContent('Pending')
   })
 })
