@@ -1,0 +1,1280 @@
+/* styles.css
+ *
+ * All the styling for the app — plain CSS, no framework.
+ *
+ * Everything starts from the variables in :root. Define a colour once, use it
+ * everywhere with var(--name), and the whole app can be retinted from one block.
+ */
+
+:root {
+  /* ------------------------------------------------------------------
+   * COLOUR SYSTEM
+   *
+   * Colours are grouped by the JOB they do, not by how they look. That's
+   * what stops a palette drifting: to add something you first ask which
+   * job it belongs to, and reuse the value that's already there.
+   *
+   *   neutrals  — surfaces and text. One family, so nothing clashes.
+   *   brand     — identity: the top bar, primary buttons, focus rings.
+   *   status    — state: draft / under review / approved / rejected.
+   *   identity  — telling roles apart.
+   *   sequential— magnitude: the approval progress bar.
+   * ------------------------------------------------------------------ */
+
+  /* --- Neutrals: one cool-grey family for every surface and label --- */
+  --bg: #f4f6f9;
+  --surface: #ffffff;
+  --sunken: #f1f4f8;
+  --border: #e2e6ec;
+  --border-strong: #c8cfd9;
+
+  --text: #101828;
+  --text-secondary: #475467;
+  --text-muted: #98a2b3;
+
+  /* --- Brand: the deep navy of the top bar, and one blue for actions.
+   * The accent is kept for primary buttons and focus rings only — an accent
+   * reads as deliberate by being rare. */
+  --brand-deep: #101a2e;
+  --brand-deep-2: #1b2942;
+  --accent: #2a78d6;
+  --accent-hover: #1c5cab;
+  --accent-soft: #eaf2fd;
+  --accent-ring: rgba(42, 120, 214, 0.35);
+
+  /* --- Status: RESERVED. These four say what state something is in, and
+   * are never reused to tell one thing from another.
+   *
+   * Approved-green and rejected-red measure only ~4 units apart under a
+   * red/green colour-blindness simulation — effectively the same colour to
+   * roughly 1 in 12 men. So every status is shown as icon + label + colour,
+   * and colour is the channel that's allowed to fail. See StatusIcon.tsx.
+   *
+   * Each has: a solid tone for icons and bars, a soft tint for backgrounds,
+   * and a dark tone that's readable as text on that tint. */
+  --status-draft: #6b7280;
+  --status-draft-soft: #f2f4f7;
+  --status-draft-ink: #414651;
+
+  --status-review: #fab219;
+  --status-review-soft: #fff8e6;
+  --status-review-ink: #93500a;
+
+  --status-approved: #0ca30c;
+  --status-approved-soft: #e9f9ea;
+  --status-approved-ink: #10662a;
+
+  --status-rejected: #d03b3b;
+  --status-rejected-soft: #fdecec;
+  --status-rejected-ink: #a02020;
+
+  /* --- Identity: telling the three roles apart. Deliberately clear of every
+   * status hue above, so a role badge can never be mistaken for a state.
+   * Employee is intentionally neutral — it's the default role with no extra
+   * powers, and colour would over-state it. */
+  --role-employee: #667085;
+  --role-employee-soft: #f2f4f7;
+  --role-manager: #2a78d6;
+  --role-manager-soft: #eaf2fd;
+  --role-senior: #4a3aa7;
+  --role-senior-soft: #eeecfa;
+
+  /* --- Sequential: the approval progress bar. The unfilled track is a much
+   * lighter step of the SAME blue as the fill, not a grey, so the bar reads
+   * as one measure rather than two blocks. */
+  --meter-fill: #2a78d6;
+  --meter-track: #cde2fb;
+
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.05), 0 1px 3px rgba(16, 24, 40, 0.04);
+  --shadow-md: 0 2px 4px -1px rgba(16, 24, 40, 0.05), 0 6px 16px -4px rgba(16, 24, 40, 0.1);
+  --shadow-lg: 0 10px 30px -8px rgba(16, 24, 40, 0.18);
+
+  --radius: 12px;
+  --radius-sm: 7px;
+  --radius-pill: 999px;
+}
+
+/* Make width include padding and border everywhere — the near-universal
+ * default that stops layouts surprising you. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial,
+    sans-serif;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- Sign-on screen ---------- */
+
+.signin {
+  display: grid;
+  place-items: center; /* centres both horizontally and vertically */
+  min-height: 100vh;   /* vh = percent of the viewport height */
+  padding: 32px 20px;
+}
+
+.signin-card {
+  width: 100%;
+  max-width: 520px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  padding: 32px;
+}
+
+.signin-title {
+  margin: 0 0 4px;
+  font-size: 24px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.signin-subtitle {
+  margin: 0 0 18px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.signin-notice {
+  margin: 0 0 20px;
+  padding: 11px 14px;
+  background: var(--accent-soft);
+  border: 1px solid #bfdbfe;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: #1e3a8a;
+}
+
+.signin-list {
+  list-style: none; /* remove the default bullets */
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.signin-user {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+.signin-user:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.signin-user:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+.signin-avatar {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.signin-details {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0; /* lets long text shrink rather than overflow the row */
+}
+
+.signin-name {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.signin-email,
+.signin-role-note {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ---------- Role badges ---------- */
+
+.role-badge {
+  flex: 0 0 auto;
+  padding: 2px 9px;
+  border-radius: var(--radius-pill);
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+/* The role has its space replaced with a dash to make a valid class name. */
+
+
+
+/* ---------- Page shell ---------- */
+
+/* The bar spans the window; the content below it stays in a readable column. */
+.page {
+  min-height: 100vh;
+}
+
+.content-wrap {
+  max-width: 1000px;
+  margin: 0 auto; /* auto left/right margins centre the column */
+  padding: 24px 24px 80px;
+}
+
+/* The top bar is a solid dark band across the full width of the window —
+ * it anchors the page and makes the app read as a product rather than a
+ * loose document. The gradient is very slight; a strong one would date it. */
+.topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 28px;
+  background: linear-gradient(180deg, var(--brand-deep-2), var(--brand-deep));
+  color: #ffffff;
+}
+
+.topbar-title {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: #ffffff;
+}
+
+/* A small mark before the title, drawn in CSS rather than shipped as an image. */
+.topbar-mark {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: var(--accent);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.topbar-name {
+  color: #ffffff;
+}
+
+/* On the dark band the role badge needs its own treatment — the light tints
+ * used on white would disappear here. */
+.topbar .role-badge {
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+}
+
+/* Likewise the sign-out button: an outline on dark, not a white box. */
+.topbar .btn {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+}
+
+.topbar .btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.45);
+  color: #ffffff;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.topbar-user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.topbar-name {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* ---------- Tabs ---------- */
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 20px 0 24px;
+  padding: 5px;
+  background: var(--sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 550;
+  cursor: pointer;
+  padding: 8px 15px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.tab:hover {
+  color: var(--text);
+}
+
+/* The selected tab is raised onto a white surface, so it reads as selected
+ * from shape as well as colour. */
+.tab-active {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+}
+
+.tab:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+.tab-count {
+  min-width: 19px;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+}
+
+/* ---------- Panels, sections, generic layout ---------- */
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  padding: 24px;
+}
+
+.panel-heading,
+.section-heading {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 0 18px;
+  font-size: 12px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-muted);
+}
+
+.count {
+  min-width: 20px;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--sunken);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 11px;
+  text-align: center;
+}
+
+/* A vertical stack with even spacing — used for lists of cards and sections. */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.empty {
+  margin: 0;
+  padding: 32px 20px;
+  text-align: center;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+/* ---------- Form fields ---------- */
+
+.field {
+  display: flex;
+  flex-direction: column; /* label above its input */
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.field label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.field input {
+  font: inherit; /* form controls don't inherit fonts on their own */
+  font-size: 14px;
+  color: var(--text);
+  background: var(--surface);
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  width: 100%;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.field input::placeholder {
+  color: var(--text-muted);
+}
+
+/* `:focus-visible` shows the ring for keyboard users but not on mouse clicks.
+ * Never remove focus styling without replacing it — it's how someone
+ * navigating by keyboard knows where they are. */
+.field input:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+.routing-hint {
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  background: var(--sunken);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.error,
+.confirmation {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.error {
+  background: var(--rejected-soft);
+  border: 1px solid #fecaca;
+  color: var(--rejected);
+}
+
+.confirmation {
+  background: var(--approved-soft);
+  border: 1px solid #bbf7d0;
+  color: var(--approved);
+}
+
+/* ::before inserts decorative content from CSS, keeping the markup about
+ * meaning rather than decoration. */
+.error::before,
+.confirmation::before {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-pill);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.error::before {
+  content: '!';
+  background: var(--rejected);
+}
+
+.confirmation::before {
+  content: '✓';
+  background: var(--approved);
+}
+
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+/* ---------- Buttons ---------- */
+
+.btn {
+  font: inherit;
+  font-size: 14px;
+  font-weight: 550;
+  cursor: pointer;
+  padding: 10px 18px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text-secondary);
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease,
+    transform 0.1s ease;
+}
+
+.btn:hover {
+  background: var(--sunken);
+  color: var(--text);
+}
+
+/* A tiny nudge down on press makes a button feel physical. */
+.btn:active {
+  transform: translateY(1px);
+}
+
+.btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+.btn-small {
+  padding: 6px 13px;
+  font-size: 13px;
+}
+
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.btn-primary:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  color: #ffffff;
+}
+
+.btn-approve {
+  background: var(--approved);
+  border-color: var(--approved);
+  color: #ffffff;
+}
+
+.btn-approve:hover {
+  background: #166534;
+  border-color: #166534;
+  color: #ffffff;
+}
+
+.btn-danger {
+  background: transparent;
+  border-color: #fecaca;
+  color: var(--rejected);
+}
+
+.btn-danger:hover {
+  background: var(--rejected-soft);
+  border-color: var(--rejected);
+  color: var(--rejected);
+}
+
+/* ---------- Form cards ---------- */
+
+.form-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  padding: 18px 20px;
+  transition: box-shadow 0.18s ease;
+}
+
+.form-card:hover {
+  box-shadow: var(--shadow-md);
+}
+
+.form-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.form-number {
+  margin: 0 0 2px;
+  /* A monospace font makes reference numbers line up and easy to compare. */
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+}
+
+.form-name {
+  margin: 0 0 3px;
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.form-meta {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.form-card-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.form-amount {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 650;
+  /* Tabular figures are all the same width, so amounts align in a column. */
+  font-variant-numeric: tabular-nums;
+}
+
+
+/* StatusBadge builds these names from the status, with the space in
+ * "Under review" replaced by a dash. */
+
+
+
+
+.form-card-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+/* ---------- Approval trail ---------- */
+
+.stages {
+  /* An <ol> because order matters, but the default numbers and indent are
+   * replaced by our own markers. */
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.stages-empty {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.stage {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+/* The line joining one stage to the next. The last has none, as there's
+ * nothing below it to join to. */
+.stage:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 17px;
+  height: 9px;
+  width: 1px;
+  background: var(--border-strong);
+}
+
+.stage-marker {
+  flex: 0 0 auto;
+  width: 11px;
+  height: 11px;
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  border: 2px solid var(--border-strong);
+}
+
+.stage-role {
+  font-weight: 600;
+  min-width: 118px;
+}
+
+.stage-decision {
+  color: var(--text-muted);
+}
+
+/* Per-state colouring. StageList builds these class names from each stage's
+ * decision, plus stage-active for the one awaiting a decision. */
+.stage-approved .stage-marker {
+  background: var(--approved);
+  border-color: var(--approved);
+}
+
+.stage-approved .stage-decision {
+  color: var(--approved);
+  font-weight: 550;
+}
+
+.stage-rejected .stage-marker {
+  background: var(--rejected);
+  border-color: var(--rejected);
+}
+
+.stage-rejected .stage-decision {
+  color: var(--rejected);
+  font-weight: 550;
+}
+
+.stage-active .stage-marker {
+  background: var(--review-soft);
+  border-color: var(--review);
+  /* A soft halo draws the eye to the one stage that can be acted on. */
+  box-shadow: 0 0 0 3px var(--review-soft);
+}
+
+.stage-active .stage-decision {
+  color: var(--review);
+  font-weight: 600;
+}
+
+/* Stages not yet reached are faded — visible for context, clearly inactive. */
+.stage-upcoming {
+  opacity: 0.5;
+}
+
+/* ---------- Decisions table ---------- */
+
+/* Wrapping the table lets it scroll sideways on a narrow screen instead of
+ * forcing the whole page to scroll. */
+.table-wrap {
+  overflow-x: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+
+.decisions {
+  width: 100%;
+  /* collapse merges adjacent cell borders into one clean line. */
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+
+.decisions th,
+.decisions td {
+  text-align: left;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.decisions th {
+  background: var(--sunken);
+  font-size: 11px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+/* No border under the final row — it sits on the container's own edge. */
+.decisions tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.decisions .mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.decisions .numeric {
+  font-variant-numeric: tabular-nums;
+}
+
+.decision-tag {
+  padding: 2px 9px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.decision-approved {
+  background: var(--approved-soft);
+  color: var(--approved);
+}
+
+.decision-rejected {
+  background: var(--rejected-soft);
+  color: var(--rejected);
+}
+
+/* ---------- Narrow screens ---------- */
+
+@media (max-width: 640px) {
+  .page {
+    padding: 20px 14px 60px;
+  }
+
+  .form-card-header {
+    flex-direction: column;
+  }
+
+  .form-card-right {
+    align-items: flex-start;
+    flex-direction: row;
+    gap: 10px;
+  }
+}
+
+/* ==================================================================
+ * The pieces added in the visual pass: status badges, role badges,
+ * stat tiles, the progress meter, and the card status stripe.
+ * ================================================================== */
+
+/* ---------- Status badges ---------- */
+
+/* Icon + label + colour. The icon is what carries the meaning when colour
+ * can't — see the note on the status variables at the top of this file. */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px 3px 8px;
+  border-radius: var(--radius-pill);
+  border: 1px solid transparent;
+  font-size: 11px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+/* The SVG inherits the badge's text colour via `stroke: currentColor`. */
+.status-badge svg {
+  flex: 0 0 auto;
+}
+
+/* StatusBadge builds these names from the status, with the space in
+ * "Under review" replaced by a dash. */
+.status-Draft {
+  background: var(--status-draft-soft);
+  border-color: #e4e7ec;
+  color: var(--status-draft-ink);
+}
+
+.status-Under-review {
+  background: var(--status-review-soft);
+  border-color: #fbe6b4;
+  color: var(--status-review-ink);
+}
+
+.status-Approved {
+  background: var(--status-approved-soft);
+  border-color: #b9e8bd;
+  color: var(--status-approved-ink);
+}
+
+.status-Rejected {
+  background: var(--status-rejected-soft);
+  border-color: #f7c9c9;
+  color: var(--status-rejected-ink);
+}
+
+/* ---------- Role badges ---------- */
+
+.role-badge {
+  flex: 0 0 auto;
+  padding: 2px 9px;
+  border-radius: var(--radius-pill);
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.role-Employee {
+  background: var(--role-employee-soft);
+  color: var(--role-employee);
+}
+
+.role-Manager {
+  background: var(--role-manager-soft);
+  color: var(--role-manager);
+}
+
+.role-Senior-Manager {
+  background: var(--role-senior-soft);
+  color: var(--role-senior);
+}
+
+/* Sign-on avatars take the same three identity colours, so the colour you
+ * see beside a name on the sign-on page is the one you see in the top bar. */
+.avatar-Employee {
+  background: var(--role-employee);
+}
+
+.avatar-Manager {
+  background: var(--role-manager);
+}
+
+.avatar-Senior-Manager {
+  background: var(--role-senior);
+}
+
+/* ---------- Stat tiles ---------- */
+
+.stat-tiles {
+  display: grid;
+  /* auto-fit + minmax means the tiles reflow to fit whatever width there is,
+   * without a media query: as many per row as will fit at 150px or wider. */
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.stat-tile {
+  position: relative;
+  display: grid;
+  /* An icon column beside two rows of text. */
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 11px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+/* A colour bar down the left edge, matching the status the tile counts. */
+.stat-tile::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--tile-colour);
+}
+
+.stat-tile-icon {
+  grid-row: 1 / 3; /* the icon spans both text rows */
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--tile-soft);
+  color: var(--tile-colour);
+}
+
+.stat-tile-value {
+  font-size: 22px;
+  font-weight: 650;
+  line-height: 1.15;
+  /* Deliberately NOT tabular-nums: tabular figures give every digit the width
+   * of a zero, which makes a big standalone number look loose. Those are for
+   * columns that must line up — see the decisions table below. */
+}
+
+.stat-tile-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* A tile at zero recedes, so your eye goes to the states that have something
+ * in them. It stays legible — this is de-emphasis, not hiding. */
+.stat-tile-empty .stat-tile-value {
+  color: var(--text-muted);
+}
+
+.stat-tile-empty .stat-tile-icon {
+  background: var(--sunken);
+  color: var(--text-muted);
+}
+
+.stat-tile-empty::before {
+  background: var(--border-strong);
+}
+
+/* Each tile sets the two variables its parts read. */
+.tile-Draft {
+  --tile-colour: var(--status-draft);
+  --tile-soft: var(--status-draft-soft);
+}
+
+.tile-Under-review {
+  --tile-colour: var(--status-review);
+  --tile-soft: var(--status-review-soft);
+}
+
+.tile-Approved {
+  --tile-colour: var(--status-approved);
+  --tile-soft: var(--status-approved-soft);
+}
+
+.tile-Rejected {
+  --tile-colour: var(--status-rejected);
+  --tile-soft: var(--status-rejected-soft);
+}
+
+/* ---------- Approval progress meter ---------- */
+
+.meter-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.meter {
+  flex: 1;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  /* The track is a light step of the same blue as the fill, not a grey, so
+   * the whole bar reads as one measure. */
+  background: var(--meter-track);
+  overflow: hidden;
+}
+
+.meter-fill {
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--meter-fill);
+  transition: width 0.3s ease;
+}
+
+/* Once something is rejected the bar switches to the rejected colour: a
+ * "complete" blue bar would otherwise imply the form went through. */
+.meter-rejected {
+  background: var(--status-rejected-soft);
+}
+
+.meter-rejected .meter-fill {
+  background: var(--status-rejected);
+}
+
+.meter-label {
+  flex: 0 0 auto;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+/* ---------- Status stripe on a form card ---------- */
+
+.form-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.form-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--card-colour);
+}
+
+.card-Draft {
+  --card-colour: var(--status-draft);
+}
+
+.card-Under-review {
+  --card-colour: var(--status-review);
+}
+
+.card-Approved {
+  --card-colour: var(--status-approved);
+}
+
+.card-Rejected {
+  --card-colour: var(--status-rejected);
+}
+
+/* ---------- Stage markers ---------- */
+
+/* The markers now hold a glyph, so they need to be a little larger and to
+ * centre their contents. */
+.stage-marker {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  color: #ffffff;
+}
+
+.stage-marker svg {
+  width: 11px;
+  height: 11px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.stage-approved .stage-marker {
+  background: var(--status-approved);
+  border-color: var(--status-approved);
+}
+
+.stage-approved .stage-decision {
+  color: var(--status-approved-ink);
+  font-weight: 550;
+}
+
+.stage-rejected .stage-marker {
+  background: var(--status-rejected);
+  border-color: var(--status-rejected);
+}
+
+.stage-rejected .stage-decision {
+  color: var(--status-rejected-ink);
+  font-weight: 550;
+}
+
+.stage-active .stage-marker {
+  background: var(--status-review);
+  border-color: var(--status-review);
+  box-shadow: 0 0 0 3px var(--status-review-soft);
+}
+
+.stage-active .stage-decision {
+  color: var(--status-review-ink);
+  font-weight: 600;
+}
+
+/* Adjust the connector line for the larger markers. */
+.stage:not(:last-child)::before {
+  left: 7px;
+  top: 19px;
+  height: 8px;
+}
+
+/* ---------- Sign-on page background ---------- */
+
+/* The sign-on screen sits on the same deep navy as the top bar, so the two
+ * halves of the app feel like one product. */
+.signin {
+  background: linear-gradient(160deg, var(--brand-deep-2), var(--brand-deep));
+}
+
+.signin-card {
+  box-shadow: 0 24px 60px -12px rgba(0, 0, 0, 0.45);
+}
+
+/* ---------- Sign-on: role groups ---------- */
+
+/* The card is capped at the window height and the account list scrolls inside
+ * it, so adding more people to the directory never pushes the card off screen. */
+.signin-card {
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
+}
+
+.signin-groups {
+  overflow-y: auto;
+  /* Room for the scrollbar so it never sits on top of a row. */
+  padding-right: 4px;
+  margin-right: -4px;
+}
+
+.signin-group + .signin-group {
+  margin-top: 18px;
+}
+
+.signin-group-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 9px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--border);
+}
+
+.signin-group-count {
+  min-width: 19px;
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  background: var(--sunken);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+}
+
+/* `flex-basis: 100%` pushes the note onto its own line below the badge. */
+.signin-group-note {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Rows are tighter now that the group heading carries the role. */
+.signin-user {
+  padding: 9px 12px;
+}
+
+.signin-avatar {
+  width: 32px;
+  height: 32px;
+  font-size: 12px;
+}

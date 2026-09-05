@@ -1,0 +1,122 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## What this is
+
+A single-page expense-approval app: anyone submits a form, and how many signatures
+it needs depends on the amount. No server, no database, no network calls — state
+lives in `localStorage` only. Vite + React + TypeScript, plain CSS, Vitest + React
+Testing Library, oxlint (not ESLint).
+
+The owner is learning React/TypeScript, so files are deliberately small,
+single-purpose and comment-heavy, and comments explain *why* rather than restating
+the code. Match that density when adding code here.
+
+**The sign-on screen is a demo, not real SSO** — no password, no identity provider,
+no server. Don't describe it as authentication; the app takes the picked user's word
+for it. Real sign-on would need a backend.
+
+## Commands
+
+| Command | Notes |
+| --- | --- |
+| `npm run dev` | Dev server with HMR. Prints its port — it will use 5174+ if 5173 is taken. |
+| `npm test` | `vitest run` — one pass, non-watching. |
+| `npm run test:watch` | Watch mode. |
+| `npm run build` | `tsc -b && vite build`. The `tsc -b` step type-checks tests too (see below). |
+| `npm run lint` | oxlint. |
+
+Run a single test file or a single test by name:
+
+```bash
+npx vitest run src/domain/workflow.test.ts
+npx vitest run -t "nobody approves their own form"
+```
+
+## Architecture
+
+Three layers, each depending only on the one below: `domain` knows nothing about
+React; `state` knows nothing about how things look; `ui` holds no rules.
+
+```
+src/data/     the dummy user directory
+src/domain/   the rules — pure TypeScript
+src/state/    reducer + context + localStorage
+src/ui/       components
+```
+
+**Business rules live in `src/domain/workflow.ts`, as pure functions.** Put new
+rules there, not in components or the reducer. Three that matter:
+
+- **Routing is `buildStages(amount)`** — one function decides whether a form needs
+  Manager only (≤ `SENIOR_APPROVAL_THRESHOLD`, currently 1000) or Manager then
+  Senior Manager (above it). Never branch on the amount anywhere else.
+- **Status is derived, never stored.** `getStatus()` computes Draft / Under review /
+  Approved / Rejected from the form's `submittedAt` and its stages each time it's
+  asked. A form has no `status` field, and adding one would create a second source
+  of truth. Draft is `submittedAt === null`; stages are built at submission, so a
+  draft's `stages` array is empty.
+- **`canDecide()` is the single gatekeeper**: the stage must be the first pending
+  one (approval is sequential), the user's role must match that stage's role, and
+  the user must not be the submitter. `decide()` calls it and returns the form
+  *unchanged* if it says no — so the rules hold regardless of what the UI renders.
+  Enforce new permission rules there, not by hiding buttons.
+
+**`src/state/formsReducer.ts` is the only place forms change.** It delegates to the
+domain layer rather than reimplementing rules. New operations become an entry in the
+`Action` union; the `default` case is what makes TypeScript flag a missing branch.
+
+**`src/state/storage.ts` is the only file touching `localStorage`.** Both loaders
+swallow errors on purpose — blocked storage (private browsing) or corrupt JSON must
+degrade to an empty list, never throw. It also holds `nextSequence`, the form-number
+counter: numbers are handed out from it rather than derived from the list, so
+deleting a form never causes a number to be reused.
+
+**Two people minimum per approving role.** Because nobody may approve their own
+form, a form raised by a Manager needs a *different* Manager. Trimming
+`src/data/users.ts` to one person in a role would strand that person's own forms.
+`src/data/users.test.ts` guards this, plus unique ids and names.
+
+## Conventions that will bite you
+
+- `verbatimModuleSyntax` is on: type-only imports must use `import type { … }`.
+- `noUnusedLocals` / `noUnusedParameters` are on — an unused variable fails the build.
+- Tests live under `src/`, which `tsconfig.app.json` includes, so **type errors in
+  tests break the production build**. Run `npm run build` after touching tests.
+- Vitest is configured inside `vite.config.ts` (the `test` block), not a separate
+  file. Globals need both `globals: true` there and `"vitest/globals"` in
+  `tsconfig.app.json`'s `types` array.
+- **oxlint's `only-export-components` fails a file that exports a component
+  alongside a plain function.** This has bitten twice; `src/ui/format.ts` exists
+  solely because of it. Put shared helpers in their own module.
+- Class names are built from data and must have matching CSS in `styles.css` or the
+  element renders unstyled — `status-${status}`, `card-${status}`, `tile-${status}`,
+  `role-${role}`, `avatar-${role}`, `stage-${decision}`. **Spaces are replaced with
+  dashes** (`"Under review"` → `status-Under-review`, `"Senior Manager"` →
+  `role-Senior-Manager`), so a new multi-word status or role needs that same
+  `.replace(' ', '-')` and its own rules.
+- Tests query by accessible label and role. Status words appear both as stat-tile
+  labels and inside badges, so assertions about a form's status must scope to the
+  badge: `getByText('Approved', { selector: '.status-label' })`. Unscoped queries
+  fail with "Found multiple elements".
+- Test helpers pick an account by matching its name, so **no user's name may be a
+  substring of another's** — enforced by a test in `src/data/users.test.ts`.
+
+## Colour and accessibility
+
+`src/styles.css` groups variables by the **job** they do (neutrals, brand, status,
+identity, sequential), all defined once in `:root`. Use those variables rather than
+literal hex values.
+
+**Status is never carried by colour alone.** Approved-green and rejected-red measure
+~4 ΔE apart under a deuteranopia simulation — indistinguishable to red/green
+colourblind viewers. Every status therefore renders as **icon + label + colour**
+(`StatusIcon.tsx`), and the timeline markers in `StageList.tsx` carry glyphs rather
+than being plain dots. A new status needs a distinct *shape*, not just a new colour.
+
+The status palette (good/warning/critical) is reserved for state and must not be
+reused to tell entities apart; role colours are deliberately clear of those hues.
+The progress meter's empty track is a lighter step of the *same* blue as the fill,
+not grey. Big standalone numbers use normal figures; `tabular-nums` is only for the
+decisions table, where amounts align vertically.
