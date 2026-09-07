@@ -501,6 +501,31 @@ body {
   font-size: 12px;
 }
 
+/* PHASE 1. The "describe it instead" block on the New form screen.
+ *
+ * Tinted with the brand accent, not a status colour: the status palette is
+ * reserved for saying what state a form is in, and this is an optional
+ * shortcut, not a state. Sunk into the panel so it reads as a helper above
+ * the real fields rather than as the first of them. */
+.assist {
+  margin-bottom: 20px;
+  padding: 16px;
+  background: var(--accent-soft);
+  border: 1px solid var(--meter-track);
+  border-radius: var(--radius-sm);
+}
+
+/* The last field inside carries the panel's own spacing, so drop its margin. */
+.assist .field {
+  margin-bottom: 12px;
+}
+
+.assist-note {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
 .routing-hint {
   margin: 0 0 16px;
   padding: 10px 14px;

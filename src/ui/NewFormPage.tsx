@@ -8,6 +8,7 @@
 
 import { useState } from 'react'
 import type { ChangeEvent } from 'react'
+import { useFormExtraction } from '../ai/useFormExtraction'
 import { DEPARTMENTS } from '../data/users'
 import { EXPENSE_CATEGORIES } from '../data/expenseCategories'
 import type { Department, ReceiptAttachment } from '../domain/types'
@@ -26,6 +27,11 @@ export function NewFormPage() {
   const [receipt, setReceipt] = useState<ReceiptAttachment | null>(null)
   const [error, setError] = useState('')
   const [confirmation, setConfirmation] = useState('')
+
+  // PHASE 1. The free-text box and what the assistant said about its answer.
+  const [description, setDescription] = useState('')
+  const [assistantNotes, setAssistantNotes] = useState('')
+  const extraction = useFormExtraction()
 
   if (currentUser === null) return null
   const signedInUser = currentUser
@@ -74,6 +80,32 @@ export function NewFormPage() {
     setReceipt(null)
     setError('')
     setConfirmation(message)
+    setDescription('')
+    setAssistantNotes('')
+  }
+
+  /**
+   * PHASE 1. Ask the server to read the description and fill the fields in.
+   *
+   * It FILLS, it does not submit. Everything the model produced lands in the
+   * ordinary inputs below, where the person can see it, change it, and decide
+   * whether to send it — the same fields they'd have typed themselves. That is
+   * deliberate, and it's the pattern the later phases keep: the AI drafts, a
+   * human decides. Nothing here touches the reducer.
+   */
+  async function handleExtract() {
+    const extracted = await extraction.run(description)
+    if (extracted === null) return
+
+    setName(extracted.name)
+    // A null amount means the description never said — leave the field empty
+    // rather than putting a made-up number in front of someone to approve.
+    setAmount(extracted.amount === null ? '' : String(extracted.amount))
+    setDepartment(extracted.department)
+    setExpenseType(extracted.expenseType)
+    setAssistantNotes(extracted.notes)
+    setError('')
+    setConfirmation('')
   }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -102,6 +134,46 @@ export function NewFormPage() {
   return (
     <form className="panel" onSubmit={handleSubmit}>
       <h2 className="panel-heading">New form</h2>
+
+      {/* PHASE 1. Optional shortcut: describe the expense and let the
+          assistant fill the fields below, which stay editable. */}
+      <div className="assist">
+        <div className="field">
+          <label htmlFor="form-description">Describe it instead (optional)</label>
+          <textarea
+            id="form-description"
+            rows={3}
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+            placeholder="e.g. Took three clients to dinner in Mumbai on Tuesday, came to about 420 dollars"
+          />
+          <span className="field-hint">
+            Fills the fields below. You still check them and submit yourself.
+          </span>
+        </div>
+
+        <button
+          type="button"
+          className="btn btn-small"
+          // Disabled while in flight, so an impatient second click can't fire
+          // a second paid request.
+          disabled={extraction.pending || description.trim() === ''}
+          onClick={() => void handleExtract()}
+        >
+          {extraction.pending ? 'Reading…' : 'Fill the form for me'}
+        </button>
+
+        {extraction.error && (
+          <p className="error" role="alert">
+            {extraction.error}
+          </p>
+        )}
+        {assistantNotes && (
+          <p className="assist-note" role="status">
+            Assistant note: {assistantNotes}
+          </p>
+        )}
+      </div>
 
       {/* Pairing <label htmlFor> with an input id means clicking the label
           focuses the field, and screen readers announce the two together. */}
