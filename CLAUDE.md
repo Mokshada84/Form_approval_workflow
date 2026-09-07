@@ -21,7 +21,9 @@ for it. Real sign-on would need a backend.
 
 | Command | Notes |
 | --- | --- |
-| `npm run dev` | Dev server with HMR. Prints its port — it will use 5174+ if 5173 is taken. |
+| `npm run dev` | Runs **both** processes: the Vite dev server and the API server. |
+| `npm run dev:web` | Vite alone, with HMR. Prints its port — it will use 5174+ if 5173 is taken. The AI features need `dev:api` too. |
+| `npm run dev:api` | The API server alone (`tsx watch server/index.ts`), port 8787. Needs a `.env`. |
 | `npm test` | `vitest run` — one pass, non-watching. |
 | `npm run test:watch` | Watch mode. |
 | `npm run build` | `tsc -b && vite build`. The `tsc -b` step type-checks tests too (see below). |
@@ -44,7 +46,44 @@ src/data/     the dummy user directory
 src/domain/   the rules — pure TypeScript
 src/state/    reducer + context + localStorage
 src/ui/       components
+src/ai/       AI-facing helpers and hooks (browser side)
+server/       the API server — Node, holds the Anthropic key
 ```
+
+## The AI layer
+
+**The Anthropic API key lives in `server/` and nowhere else.** Everything under
+`src/` is downloaded by the browser and readable in devtools, so a key put there
+— `VITE_`-prefixed or not — is a published key. The browser POSTs to `/api/*`,
+Vite proxies that to `localhost:8787` (see `vite.config.ts`), and only that
+process talks to Anthropic. `server/env.ts` throws at startup if the key is
+missing, so a misconfigured server refuses to boot rather than failing per
+request.
+
+- **`server/client.ts` names the model once** (`MODEL`). Routes must not
+  hard-code a model string — the prompt cache is per-model, so drift between
+  routes silently costs money.
+- **One route per file**, mounted in `server/index.ts` with `app.route()`.
+- **`server/` may import from `src/data/` and `src/domain/`, never the reverse.**
+  Those modules are pure, which is what lets both TypeScript projects compile
+  them. `tsconfig.server.json` uses `module: "preserve"` so the server can
+  import Vite's extensionless paths; it omits the `DOM` lib, so server code
+  reaching for a browser API fails the build.
+- **`src/ai/extractionSchema.ts` is the single source of truth for the
+  extraction shape** — the server sends it to Claude as a JSON schema, the
+  browser gets the type from `z.infer`. Its enums are built from
+  `EXPENSE_CATEGORIES` and `DEPARTMENTS`, so the model can only return values
+  the dropdowns can display.
+- **A schema constrains shape, not meaning.** It cannot express a relationship
+  between fields, so `repairExtraction()` fixes an expense type that belongs to
+  the wrong department. Validate model output; don't assume schema-valid means
+  correct.
+- **The AI fills fields; a person submits.** Nothing in `src/ai/` dispatches to
+  the reducer. Model output lands in ordinary inputs the user reviews — keep it
+  that way as later phases add more.
+- **User text never goes into a system prompt.** It goes in a `user` message.
+  Concatenating it into the system prompt would give a submitter's text operator
+  authority.
 
 **Business rules live in `src/domain/workflow.ts`, as pure functions.** Put new
 rules there, not in components or the reducer. Three that matter:

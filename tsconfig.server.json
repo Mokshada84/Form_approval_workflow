@@ -1,0 +1,30 @@
+{
+  // PHASE 0. The server is TypeScript too, but it runs in Node, not a browser:
+  // it has `process` and the filesystem, and it has NO `document` or `window`.
+  // That's the whole point of a separate project — `lib` here omits "DOM", so
+  // if server code ever reaches for a browser API, the build says so.
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.server.tsbuildinfo",
+    "target": "es2023",
+    "lib": ["ES2023"],
+    "types": ["node"],
+    "skipLibCheck": true,
+
+    // `preserve` is the setting for "something else runs my TypeScript" — here
+    // that's tsx. It implies bundler-style resolution, which is what lets the
+    // server import modules from `src/` that were written extensionless for
+    // Vite. Without it, TypeScript would demand `../src/data/users.js` and the
+    // whole frontend would have to be rewritten to suit the server.
+    "module": "preserve",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "erasableSyntaxOnly": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["server"]
+}
