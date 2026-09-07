@@ -74,10 +74,23 @@ request.
   browser gets the type from `z.infer`. Its enums are built from
   `EXPENSE_CATEGORIES` and `DEPARTMENTS`, so the model can only return values
   the dropdowns can display.
+- **A required field is a demand for an answer, and a model will always supply
+  one.** Every extracted field is nullable for that reason. When `department`
+  and `expenseType` were required enums, "Dinner in Hawaii with Mr. Nitin" came
+  back as Finance / Client entertainment — the model had no way to say "not
+  stated", so it guessed. Nullable fields plus a `question` give it somewhere to
+  put uncertainty. **Never add a required field to a model-facing schema unless
+  the answer is genuinely always knowable.**
 - **A schema constrains shape, not meaning.** It cannot express a relationship
-  between fields, so `repairExtraction()` fixes an expense type that belongs to
-  the wrong department. Validate model output; don't assume schema-valid means
-  correct.
+  between fields, so `repairExtraction()` catches an expense type belonging to
+  the wrong department. Note it *clears and asks* rather than substituting a
+  different value — putting a value there the person never said is the same bug
+  in a new place.
+- **The Messages API is stateless.** There is no session and no conversation id;
+  the browser holds the transcript (`useFormExtraction`) and resends it in full
+  every turn. Input tokens therefore grow with the conversation, which is why
+  `MAX_TURNS` exists. Only the assistant's *question* is stored as its turn, not
+  the whole JSON object.
 - **The AI fills fields; a person submits.** Nothing in `src/ai/` dispatches to
   the reducer. Model output lands in ordinary inputs the user reviews — keep it
   that way as later phases add more.
