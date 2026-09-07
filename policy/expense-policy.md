@@ -1,23 +1,3 @@
-// policy/expensePolicy.ts
-//
-// PHASE 4. The corpus — the thing RAG retrieves FROM.
-//
-// It lives here as a string rather than as a file on disk so that both
-// TypeScript projects can compile it and Vitest can test against the real
-// document rather than a fixture. A production system would load this from a
-// CMS, a wiki export or object storage; nothing downstream cares which, because
-// everything after `parsePolicy()` works on chunks.
-//
-// The format is deliberately plain: `## §N.N Title` starts a clause, and
-// everything until the next heading is its body. Real policies are written by
-// people in Word, and headings are the one structure they reliably produce —
-// which is why heading-based chunking is the sensible first thing to try.
-//
-// Every clause is invented. Any resemblance to a real expense policy is
-// coincidental, and the numbers are chosen to interact with the app's own
-// $1,000 senior-approval threshold.
-
-export const EXPENSE_POLICY = `
 # Acme Corporation — Employee Expense Policy (rev. 2026-04)
 
 ## §1.1 Who may claim
@@ -121,4 +101,3 @@ Charitable donations made on Acme's behalf require Finance Director approval. Po
 
 ## §7.4 Expenses that are never reimbursable
 The following are never reimbursable under any circumstance: traffic and parking fines; personal grooming; personal travel insurance; loyalty programme fees; childcare; pet care; personal subscriptions and streaming services; and any cost for which the employee has already been reimbursed by a third party.
-`.trim()

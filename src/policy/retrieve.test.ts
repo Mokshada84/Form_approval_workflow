@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { POLICY_CLAUSES, findClause, parsePolicy } from './clauses'
-import { EXPENSE_POLICY } from './expensePolicy'
+import { findClause, parsePolicy } from './clauses'
+// The REAL policy document, loaded with Vite's `?raw`, which hands a file to
+// the bundler as a string. The server reads the same file from disk with `fs`
+// — two loaders, one file, so these tests cannot drift from what production
+// actually parses.
+import EXPENSE_POLICY from '../../policy/expense-policy.md?raw'
+
+const POLICY_CLAUSES = parsePolicy(EXPENSE_POLICY)
 import { buildRetrievalQuery, retrieveClauses, tokenize } from './retrieve'
 
 /** Ids of the clauses retrieved for a query, best first. */
@@ -21,11 +27,11 @@ describe('parsePolicy', () => {
     // Regression: the first parser ended each match at `(?=^## |\z)`, and
     // `\z` is not a JavaScript anchor — it matched a literal "z", so the
     // final clause of the document silently disappeared.
-    expect(findClause('§7.4')?.title).toBe('Expenses that are never reimbursable')
+    expect(findClause(POLICY_CLAUSES, '§7.4')?.title).toBe('Expenses that are never reimbursable')
   })
 
   it('keeps the id, the title and the body separate', () => {
-    const clause = findClause('§4.2')
+    const clause = findClause(POLICY_CLAUSES, '§4.2')
 
     expect(clause?.title).toBe('Client entertainment')
     expect(clause?.text).toContain('$150 per head')
@@ -36,6 +42,23 @@ describe('parsePolicy', () => {
 
   it('drops the document title, which is navigation rather than a rule', () => {
     expect(POLICY_CLAUSES.some((c) => c.text.includes('Acme Corporation — Employee'))).toBe(false)
+  })
+
+  it('gives every clause a unique id', () => {
+    // The corpus is a plain markdown file now, edited by whoever owns the
+    // policy rather than by whoever owns the code. A duplicated §number is an
+    // easy copy-paste slip, and findClause() would silently resolve every
+    // citation to the first one — so a finding would quote the wrong rule.
+    const ids = POLICY_CLAUSES.map((clause) => clause.id)
+    expect(new Set(ids).size).toBe(ids.length)
+  })
+
+  it('gives every clause a body worth retrieving', () => {
+    // A one-line stub would score, get retrieved, and crowd out a real clause.
+    for (const clause of POLICY_CLAUSES) {
+      expect(clause.text.length).toBeGreaterThan(40)
+      expect(clause.title).not.toBe('')
+    }
   })
 
   it('ignores a heading with no body', () => {

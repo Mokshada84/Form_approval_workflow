@@ -15,14 +15,21 @@
 // Pure, so the whole thing is tested without an API call.
 
 import { findClause } from '../policy/clauses'
+import type { PolicyClause } from '../policy/clauses'
 import type { PolicyCheck, VerifiedFinding, VerifiedPolicyCheck } from './policySchema'
 
-export function verifyFindings(check: PolicyCheck): VerifiedPolicyCheck {
+/**
+ * `clauses` is passed in rather than imported from a module-level constant:
+ * the corpus is a file the server loads, and keeping it an argument is what
+ * lets this run in a test against any document — including a two-clause
+ * fixture — without touching the filesystem.
+ */
+export function verifyFindings(check: PolicyCheck, clauses: PolicyClause[]): VerifiedPolicyCheck {
   const findings: VerifiedFinding[] = []
   const droppedCitations: string[] = []
 
   for (const finding of check.findings) {
-    const clause = findClause(finding.clauseId.trim())
+    const clause = findClause(clauses, finding.clauseId.trim())
     if (clause === undefined) {
       droppedCitations.push(finding.clauseId)
       continue

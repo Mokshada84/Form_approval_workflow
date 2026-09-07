@@ -2,9 +2,17 @@
 //
 // PHASE 4. CHUNKING — turning one document into retrievable pieces.
 //
-// This is the step people skip past, and it decides the ceiling on everything
-// downstream: retrieval can only ever return a chunk, so a badly cut chunk is
-// a wrong answer no amount of clever scoring will rescue.
+// The document itself is `policy/expense-policy.md`, a plain markdown file at
+// the root of the repo. It is deliberately NOT code: a policy is written and
+// revised by people who don't open an editor, it should be readable in a pull
+// request diff, and changing a spending limit shouldn't mean touching
+// TypeScript. Everything here works on the text it is given, so it neither
+// knows nor cares how that text was loaded — the server reads the file from
+// disk, the tests import it with Vite's `?raw`.
+//
+// Chunking is the step people skip past, and it decides the ceiling on
+// everything downstream: retrieval can only ever return a chunk, so a badly
+// cut chunk is a wrong answer no amount of clever scoring will rescue.
 //
 // Two failure modes bound the choice:
 //   - Chunks too LARGE: retrieving one drags in three unrelated rules, the
@@ -17,8 +25,6 @@
 // did the work: §4.2 is exactly the span a person would quote. Fixed-size
 // windows with overlap — the usual default — would cut straight through it.
 
-import { EXPENSE_POLICY } from './expensePolicy'
-
 export type PolicyClause = {
   /** The citable identifier, e.g. "§4.2". */
   id: string
@@ -28,7 +34,7 @@ export type PolicyClause = {
 }
 
 /**
- * Split the policy into clauses on its `## §N.N Title` headings.
+ * Split a policy document into clauses on its `## §N.N Title` headings.
  *
  * Anything before the first heading (the document title) is dropped: it is
  * navigation, not a rule, and retrieving it could only ever be noise.
@@ -57,10 +63,14 @@ export function parsePolicy(markdown: string): PolicyClause[] {
   })
 }
 
-/** The parsed policy, computed once at module load rather than per request. */
-export const POLICY_CLAUSES = parsePolicy(EXPENSE_POLICY)
-
-/** Look one up by its id — used to verify a citation actually exists. */
-export function findClause(id: string): PolicyClause | undefined {
-  return POLICY_CLAUSES.find((clause) => clause.id === id)
+/**
+ * Look one up by its id — used to verify a citation actually exists.
+ *
+ * Takes the clause list rather than reaching for a module-level constant, so
+ * the corpus stays an input rather than a hidden global. That is what lets
+ * this module compile in the browser project at all: it never touches the
+ * filesystem.
+ */
+export function findClause(clauses: PolicyClause[], id: string): PolicyClause | undefined {
+  return clauses.find((clause) => clause.id === id)
 }

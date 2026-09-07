@@ -121,9 +121,28 @@ request.
   aloud. Keep both when changing it.
 ## RAG (the policy check)
 
-`src/policy/` holds the corpus and the retrieval, all pure and tested;
-`server/policyRoute.ts` orchestrates. The pipeline is **retrieve → generate →
-verify**, and the last step is not optional.
+**The corpus is `policy/expense-policy.md` — a plain markdown file, not code.**
+A policy is written and revised by people who don't open an editor, it should
+read as a document in a pull-request diff, and changing a spending limit must
+not mean touching TypeScript. `server/policyCorpus.ts` is the only thing that
+reads it (once, at startup, resolving the path from `import.meta.url` rather
+than cwd); the tests load the same file with Vite's `?raw`. Two loaders, one
+file — they cannot drift.
+
+Because the corpus is now editable by non-developers, `retrieve.test.ts` guards
+the *document*: unique clause ids (a duplicated §number would make every
+citation resolve to the first one) and a body long enough to be worth
+retrieving.
+
+`src/policy/` holds the chunking and retrieval — pure, and taking the clause
+list as an argument rather than reaching for a module-level constant, which is
+what lets them compile in the browser project at all. `server/policyRoute.ts`
+orchestrates. The pipeline is **retrieve → generate → verify**, and the last
+step is not optional.
+
+`npm run dev:api` passes `--include ./policy/**` because `tsx watch` only
+watches modules it has *imported*, and the policy is read with `fs`. Without
+it you edit the policy, see no change, and conclude retrieval is broken.
 
 - **Chunking decides the ceiling.** `parsePolicy()` cuts on `## §N.N` headings
   because a numbered clause is the span a human would quote. Retrieval can only

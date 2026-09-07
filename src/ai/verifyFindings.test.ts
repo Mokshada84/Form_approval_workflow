@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { verifyFindings } from './verifyFindings'
+import { parsePolicy } from '../policy/clauses'
 import type { PolicyCheck } from './policySchema'
+import EXPENSE_POLICY from '../../policy/expense-policy.md?raw'
+
+const CLAUSES = parsePolicy(EXPENSE_POLICY)
 
 function check(overrides: Partial<PolicyCheck> = {}): PolicyCheck {
   return { findings: [], summary: 'Looks fine.', ...overrides }
@@ -14,6 +18,7 @@ describe('verifyFindings', () => {
           { clauseId: '§4.2', verdict: 'violation', explanation: 'No organisation named.' },
         ],
       }),
+      CLAUSES,
     )
 
     expect(result.findings[0].clauseTitle).toBe('Client entertainment')
@@ -30,6 +35,7 @@ describe('verifyFindings', () => {
           { clauseId: '§9.9', verdict: 'violation', explanation: 'Invented rule.' },
         ],
       }),
+      CLAUSES,
     )
 
     expect(result.findings).toHaveLength(0)
@@ -44,6 +50,7 @@ describe('verifyFindings', () => {
           { clauseId: '§1.3', verdict: 'unclear', explanation: 'No receipt attached.' },
         ],
       }),
+      CLAUSES,
     )
 
     expect(result.findings.map((f) => f.clauseId)).toEqual(['§1.3'])
@@ -53,6 +60,7 @@ describe('verifyFindings', () => {
   it('tolerates whitespace around a citation', () => {
     const result = verifyFindings(
       check({ findings: [{ clauseId: ' §2.1 ', verdict: 'compliant', explanation: 'ok' }] }),
+      CLAUSES,
     )
 
     expect(result.findings[0].clauseId).toBe('§2.1')
@@ -69,12 +77,13 @@ describe('verifyFindings', () => {
           { clauseId: '§4.2', verdict: 'violation', explanation: 'c' },
         ],
       }),
+      CLAUSES,
     )
 
     expect(result.findings.map((f) => f.verdict)).toEqual(['violation', 'unclear', 'compliant'])
   })
 
   it('passes the summary through untouched', () => {
-    expect(verifyFindings(check({ summary: 'Two issues.' })).summary).toBe('Two issues.')
+    expect(verifyFindings(check({ summary: 'Two issues.' }), CLAUSES).summary).toBe('Two issues.')
   })
 })

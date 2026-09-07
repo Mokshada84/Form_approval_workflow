@@ -2,6 +2,10 @@
 //
 // PHASE 4. RAG: retrieve, then generate.
 //
+// The corpus is a plain markdown file — see policyCorpus.ts. Nothing in this
+// route knows the policy's contents; it knows how to search a document and
+// what to do with the result.
+//
 // Given one submitted form, find the policy clauses that bear on it and ask
 // Claude whether it complies — citing the clauses it actually used.
 //
@@ -27,7 +31,7 @@
 import { Hono } from 'hono'
 import Anthropic from '@anthropic-ai/sdk'
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod'
-import { POLICY_CLAUSES } from '../src/policy/clauses.ts'
+import { POLICY_CLAUSES } from './policyCorpus.ts'
 import { buildRetrievalQuery, retrieveClauses } from '../src/policy/retrieve.ts'
 import { PolicyCheckSchema } from '../src/ai/policySchema.ts'
 import { verifyFindings } from '../src/ai/verifyFindings.ts'
@@ -140,7 +144,7 @@ Receipt attached: ${form.hasReceipt ? 'yes' : 'no'}`,
     // Every cited id is resolved against the real corpus, and the clause text
     // is attached from there. A citation that doesn't resolve is dropped.
     return c.json({
-      check: verifyFindings(response.parsed_output),
+      check: verifyFindings(response.parsed_output, POLICY_CLAUSES),
       retrievedClauseIds: retrieved.map(({ clause }) => clause.id),
     })
   } catch (error) {
