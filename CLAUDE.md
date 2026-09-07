@@ -101,6 +101,11 @@ request.
   every turn. Input tokens therefore grow with the conversation, which is why
   `MAX_TURNS` exists. Only the assistant's *question* is stored as its turn, not
   the whole JSON object.
+- **The chat is a chat, not a form control.** `NewFormPage`'s `.chat` section
+  uses bubbles, sides and a composer (Enter sends, Shift+Enter newlines). Which
+  SIDE a bubble sits on is the primary speaker cue — not colour — with an
+  `.sr-only` "You said / Assistant said" label carrying the same information
+  aloud. Keep both when changing it.
 - **The AI fills fields; a person submits.** Nothing in `src/ai/` dispatches to
   the reducer. Model output lands in ordinary inputs the user reviews — keep it
   that way as later phases add more.
