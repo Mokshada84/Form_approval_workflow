@@ -6,6 +6,7 @@
 // From the browser's point of view this is an ordinary POST to its own origin.
 // Everything that must stay secret stayed on the server.
 
+import type { Department } from '../domain/types'
 import { ExtractionTurnSchema } from './extractionSchema'
 import type { DialogueMessage, ExtractionTurn } from './extractionSchema'
 
@@ -17,14 +18,20 @@ export class ExtractionError extends Error {}
  *
  * The whole transcript goes every time — see the note in server/extractRoute.ts
  * about the Messages API being stateless.
+ *
+ * `department` is whatever the form's dropdown currently says, not the
+ * submitter's own department. Sending the live value is what lets someone pick
+ * Legal by hand and then be offered Legal's expense types, rather than being
+ * asked about a department they have already chosen.
  */
 export async function continueExtraction(
   messages: DialogueMessage[],
+  department: Department,
 ): Promise<ExtractionTurn> {
   const response = await fetch('/api/extract', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages }),
+    body: JSON.stringify({ messages, department }),
   })
 
   const body = await response.json().catch(() => null)

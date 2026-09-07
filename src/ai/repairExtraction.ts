@@ -1,55 +1,61 @@
 // ai/repairExtraction.ts
 //
-// PHASE 1b. What the schema CAN'T guarantee.
+// PHASE 1c. What the schema CAN'T guarantee.
 //
 // A JSON schema pins down the *shape* of an answer — this field is a number,
 // that one is one of these twelve strings. It cannot express a relationship
-// BETWEEN fields, and "expenseType must belong to the chosen department" is
-// exactly that. So a schema-valid answer can still be wrong for this app.
+// BETWEEN fields, and "expenseType must belong to the department" is exactly
+// that. So a schema-valid answer can still be wrong for this app.
 //
 // Kept pure and separate from the network call so it can be tested without
 // spending a penny on the API.
 
 import { EXPENSE_CATEGORIES } from '../data/expenseCategories'
+import type { Department } from '../domain/types'
 import type { ExtractionTurn } from './extractionSchema'
 import { isComplete } from './extractionSchema'
 
 /**
  * Make one turn internally consistent before anyone acts on it.
  *
- * Two repairs, both of which exist because the model can produce something
- * the schema happily allows:
+ * `workingDepartment` is the department currently selected on the form. A turn
+ * that names no department is charged to it — the model only fills the field
+ * when the person explicitly asks to cross-charge somewhere else.
+ *
+ * Three repairs, all for things the schema happily allows:
  *
  *  1. An expense type from the wrong department is discarded and ASKED about,
- *     rather than silently swapped for a different one. Substituting a value
- *     the person never said would be the same sin that started this — a guess
+ *     never silently swapped for a different one. Substituting a value the
+ *     person never said is the same sin that started all this — a guess
  *     wearing the costume of an answer.
- *  2. A turn that is missing a field but asks no question would strand the
- *     conversation with nothing to show the user, so a question is supplied.
+ *  2. A turn missing a field but asking nothing would strand the conversation
+ *     with nothing to show, so a question is supplied.
+ *  3. A turn that has everything but still asks would keep the person
+ *     answering after there was nothing left to answer.
  */
-export function repairExtraction(turn: ExtractionTurn): ExtractionTurn {
-  let repaired = turn
+export function repairExtraction(
+  turn: ExtractionTurn,
+  workingDepartment: Department,
+): ExtractionTurn {
+  // Resolve the department first: everything below depends on knowing which
+  // categories are in play, and it is never genuinely unknown.
+  let repaired: ExtractionTurn = {
+    ...turn,
+    department: turn.department ?? workingDepartment,
+  }
+  const department = repaired.department ?? workingDepartment
 
   // 1. Expense type that doesn't belong to the department.
-  if (repaired.department !== null && repaired.expenseType !== null) {
-    const allowed = EXPENSE_CATEGORIES[repaired.department]
-    if (!allowed.includes(repaired.expenseType)) {
-      repaired = {
-        ...repaired,
-        expenseType: null,
-        question: `Which ${repaired.department} expense type applies: ${allowed.join(', ')}?`,
-      }
-    }
+  if (repaired.expenseType !== null && !EXPENSE_CATEGORIES[department].includes(repaired.expenseType)) {
+    repaired = { ...repaired, expenseType: null, question: expenseTypeQuestion(department) }
   }
 
-  // 2. Incomplete, but nothing to ask. Falling back to a generic question
-  // keeps the dialogue alive instead of dead-ending on a half-filled form.
+  // 2. Incomplete, but nothing to ask.
   if (!isComplete(repaired) && repaired.question === null) {
-    repaired = { ...repaired, question: missingFieldQuestion(repaired) }
+    repaired = { ...repaired, question: missingFieldQuestion(repaired, department) }
   }
 
-  // 3. The mirror case: everything known, but still asking. A stray question
-  // would keep the user answering after there was nothing left to answer.
+  // 3. Complete, but still asking.
   if (isComplete(repaired) && repaired.question !== null) {
     repaired = { ...repaired, question: null }
   }
@@ -57,13 +63,19 @@ export function repairExtraction(turn: ExtractionTurn): ExtractionTurn {
   return repaired
 }
 
-/** A plain question naming the first field still missing. */
-function missingFieldQuestion(turn: ExtractionTurn): string {
+/** The options for a department, listed so the person can just pick one. */
+function expenseTypeQuestion(department: Department): string {
+  return `Which ${department} expense type applies: ${EXPENSE_CATEGORIES[department].join(', ')}?`
+}
+
+/**
+ * A plain question naming the first field still missing.
+ *
+ * Department is deliberately absent: it always has a value, so it is never
+ * the missing field.
+ */
+function missingFieldQuestion(turn: ExtractionTurn, department: Department): string {
   if (turn.name === null) return 'What should this expense claim be called?'
   if (turn.amount === null) return 'What is the amount in US dollars?'
-  if (turn.department === null) {
-    return 'Which department should this be charged to: Legal, Finance, or IT?'
-  }
-  const allowed = EXPENSE_CATEGORIES[turn.department]
-  return `Which ${turn.department} expense type applies: ${allowed.join(', ')}?`
+  return expenseTypeQuestion(department)
 }

@@ -86,6 +86,16 @@ request.
   the wrong department. Note it *clears and asks* rather than substituting a
   different value — putting a value there the person never said is the same bug
   in a new place.
+- **The department is never asked about.** It defaults to the submitter's own
+  and is editable on the form, so it is never genuinely unknown — asking would
+  spend a round trip establishing what's already on screen. The model sets
+  `department` only when someone explicitly cross-charges ("put this on the
+  Legal budget"). `isComplete()` therefore ignores it.
+- **`changeDepartment()` in `NewFormPage` is the only way department changes**,
+  for the dropdown and the assistant alike. Categories don't overlap between
+  departments, so a stale expense type used to survive the change: the
+  `<select>` showed one value while another was submitted, and a Legal form was
+  saved with "Software license" on it. `coerceExpenseType()` keeps them honest.
 - **The Messages API is stateless.** There is no session and no conversation id;
   the browser holds the transcript (`useFormExtraction`) and resends it in full
   every turn. Input tokens therefore grow with the conversation, which is why

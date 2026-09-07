@@ -10,7 +10,7 @@ import { useState } from 'react'
 import type { ChangeEvent } from 'react'
 import { useFormExtraction } from '../ai/useFormExtraction'
 import { DEPARTMENTS } from '../data/users'
-import { EXPENSE_CATEGORIES } from '../data/expenseCategories'
+import { EXPENSE_CATEGORIES, coerceExpenseType } from '../data/expenseCategories'
 import type { Department, ReceiptAttachment } from '../domain/types'
 import { SENIOR_APPROVAL_THRESHOLD } from '../domain/workflow'
 import { useApp } from '../state/useApp'
@@ -85,6 +85,21 @@ export function NewFormPage() {
   }
 
   /**
+   * FIX. The ONLY way department changes — the dropdown and the assistant both
+   * come through here.
+   *
+   * Expense categories don't overlap between departments, so leaving the old
+   * type in place put the form into a state where the <select> displayed one
+   * value while a different, stale one was submitted. Coercing keeps the two
+   * selects honest, and whatever it picks is visible in the dropdown for the
+   * person to change.
+   */
+  function changeDepartment(next: Department) {
+    setDepartment(next)
+    setExpenseType((current) => coerceExpenseType(next, current))
+  }
+
+  /**
    * PHASE 1b. Send the next message in the conversation.
    *
    * It FILLS, it does not submit. Everything the assistant establishes lands in
@@ -94,7 +109,7 @@ export function NewFormPage() {
    * the reducer.
    */
   async function handleSend() {
-    const result = await extraction.send(reply)
+    const result = await extraction.send(reply, department)
     if (result === null) return
 
     setReply('')
@@ -107,7 +122,9 @@ export function NewFormPage() {
     // never overwrites; it just leaves the field as it was.
     if (result.name !== null) setName(result.name)
     if (result.amount !== null) setAmount(String(result.amount))
-    if (result.department !== null) setDepartment(result.department)
+    // Department first: it decides which expense types are valid, and
+    // changeDepartment resets the type when the two no longer agree.
+    if (result.department !== null) changeDepartment(result.department)
     if (result.expenseType !== null) setExpenseType(result.expenseType)
   }
 
@@ -139,8 +156,10 @@ export function NewFormPage() {
       <h2 className="panel-heading">New form</h2>
 
       {/* PHASE 1b. Optional: describe the expense and answer the assistant's
-          questions until all four fields are known. It fills the fields below,
-          which stay editable — submitting is still your click. */}
+          questions until the name, amount and expense type are known. It never
+          asks about the department — that defaults to yours and you can change
+          it below to cross-charge. It fills the fields, which stay editable;
+          submitting is still your click. */}
       <div className="assist">
         {/* The transcript. `role="log"` tells a screen reader that new entries
             appear at the end, so each answer is announced as it arrives. */}
@@ -224,11 +243,13 @@ export function NewFormPage() {
             stopped on purpose rather than the assistant having given up. */}
         {extraction.turn !== null && extraction.turn.question === null && (
           <p className="assist-done" role="status">
-            All four fields are filled in below. Check them and submit.
+            Everything's filled in below. Check it and submit.
           </p>
         )}
 
-        {extraction.turn?.notes && (
+        {/* Only while something is still being asked — otherwise this
+            contradicts the "all filled in" line directly above it. */}
+        {extraction.turn?.question !== null && extraction.turn?.notes && (
           <p className="assist-note">Still unknown: {extraction.turn.notes}</p>
         )}
       </div>
@@ -251,7 +272,7 @@ export function NewFormPage() {
         <select
           id="form-department"
           value={department}
-          onChange={(event) => setDepartment(event.target.value as Department)}
+          onChange={(event) => changeDepartment(event.target.value as Department)}
         >
           {DEPARTMENTS.map((option) => (
             <option key={option} value={option}>

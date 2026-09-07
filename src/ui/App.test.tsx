@@ -52,6 +52,32 @@ beforeEach(() => {
   localStorage.clear()
 })
 
+describe('department and expense type stay consistent', () => {
+  it('resets the expense type when the department changes', async () => {
+    // Regression. Categories don't overlap between departments, so switching
+    // department used to leave a stale type behind: the <select> displayed one
+    // value while a different one was submitted, and a Legal form was saved
+    // with "Software license" on it. Nothing on screen showed the mismatch.
+    const user = userEvent.setup()
+    renderApp()
+
+    await signInAs(user, 'Aisha Khan') // IT
+    await user.click(screen.getByRole('tab', { name: 'New form' }))
+
+    await user.selectOptions(screen.getByLabelText('Expense type'), 'Software license')
+    await user.selectOptions(screen.getByLabelText('Department'), 'Legal')
+
+    await user.type(screen.getByLabelText('Name of the form'), 'Cross-charged filing')
+    await user.type(screen.getByLabelText('Amount (USD)'), '50')
+    await user.click(screen.getByRole('button', { name: 'Submit for approval' }))
+
+    // The saved form must carry a Legal category, not the IT one left over.
+    await user.click(screen.getByRole('tab', { name: 'My forms' }))
+    expect(screen.getByText(/Legal consultation/)).toBeInTheDocument()
+    expect(screen.queryByText(/Software license/)).not.toBeInTheDocument()
+  })
+})
+
 describe('sign-on', () => {
   it('shows the sign-on page first, with the dummy accounts', () => {
     renderApp()
