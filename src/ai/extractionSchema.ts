@@ -60,17 +60,18 @@ export type DialogueMessage = {
 }
 
 /**
- * Are all four fields known?
+ * Is there anything left to ask about?
  *
  * Derived, never stored — the same principle as `getStatus()` in the domain
  * layer. A stored "complete" flag would be a second source of truth that could
  * end up disagreeing with the fields themselves.
+ *
+ * NOTE THE ABSENCE OF `department`. It is never asked about, because it is
+ * never unknown: a claim is charged to the submitter's own department unless
+ * they say otherwise. Asking would spend a whole round trip establishing
+ * something already on screen. The model may still SET it — that's how
+ * cross-charging by saying "put this on Legal" works — it just never asks.
  */
 export function isComplete(turn: ExtractionTurn): boolean {
-  return (
-    turn.name !== null &&
-    turn.amount !== null &&
-    turn.department !== null &&
-    turn.expenseType !== null
-  )
+  return turn.name !== null && turn.amount !== null && turn.expenseType !== null
 }

@@ -8,6 +8,7 @@
 // server-side state to also reset.
 
 import { useCallback, useState } from 'react'
+import type { Department } from '../domain/types'
 import { continueExtraction } from './extractForm'
 import type { DialogueMessage, ExtractionTurn } from './extractionSchema'
 
@@ -24,7 +25,7 @@ export function useFormExtraction() {
    * rather than having to watch state in an effect.
    */
   const send = useCallback(
-    async (text: string): Promise<ExtractionTurn | null> => {
+    async (text: string, department: Department): Promise<ExtractionTurn | null> => {
       const trimmed = text.trim()
       if (trimmed === '') return null
 
@@ -37,7 +38,7 @@ export function useFormExtraction() {
       setError('')
 
       try {
-        const result = await continueExtraction(next)
+        const result = await continueExtraction(next, department)
         setTurn(result)
 
         // Only the QUESTION goes into the transcript as the assistant's turn,
