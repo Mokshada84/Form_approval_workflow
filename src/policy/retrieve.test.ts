@@ -124,9 +124,13 @@ describe('where keyword retrieval fails', () => {
     expect(idsFor('new computer for my work')).not.toContain('§5.1')
   })
 
-  it('misses the alcohol clause when you say "wine"', () => {
-    // §4.3 governs exactly this and says "alcohol", never "wine".
-    expect(idsFor('bottle of wine with the client')).not.toContain('§4.3')
+  it('reaches the alcohol clause only via a neighbouring word, not via "wine"', () => {
+    // This one used to be a clean miss. It now lands — but NOT because
+    // anything understood that wine is alcohol. §4.3 says "only where clients
+    // are present", and the query happens to contain "client". Remove that
+    // word and it disappears again, which is the real state of affairs.
+    expect(idsFor('bottle of wine with the client')).toContain('§4.3')
+    expect(idsFor('bottle of wine at dinner')).not.toContain('§4.3')
   })
 
   it('misses the companion clause when you say "wife"', () => {
@@ -176,7 +180,19 @@ describe('buildRetrievalQuery', () => {
   })
 
   it('does not ask about missing receipts when one is attached', () => {
-    expect(buildRetrievalQuery({ ...claim, hasReceipt: true })).toContain('receipt attached')
-    expect(buildRetrievalQuery({ ...claim, hasReceipt: true })).not.toContain('missing')
+    const terms = buildRetrievalQuery({ ...claim, hasReceipt: true }).map((t) => t.term)
+    expect(terms).toContain('attached')
+    expect(terms).not.toContain('missing')
+  })
+
+  it('weights what the person wrote above what we inferred', () => {
+    // The whole point of the weighting: expansion terms exist to reach
+    // clauses the claim's own words can't, and must never outvote them.
+    const terms = buildRetrievalQuery(claim)
+    const nameTerm = terms.find((t) => t.term === 'hawaii')
+    const inferredTerm = terms.find((t) => t.term === 'threshold')
+
+    expect(nameTerm?.weight).toBe(1)
+    expect(inferredTerm?.weight).toBeLessThan(1)
   })
 })
