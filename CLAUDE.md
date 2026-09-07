@@ -119,6 +119,35 @@ request.
   SIDE a bubble sits on is the primary speaker cue — not colour — with an
   `.sr-only` "You said / Assistant said" label carrying the same information
   aloud. Keep both when changing it.
+## RAG (the policy check)
+
+`src/policy/` holds the corpus and the retrieval, all pure and tested;
+`server/policyRoute.ts` orchestrates. The pipeline is **retrieve → generate →
+verify**, and the last step is not optional.
+
+- **Chunking decides the ceiling.** `parsePolicy()` cuts on `## §N.N` headings
+  because a numbered clause is the span a human would quote. Retrieval can only
+  ever return a chunk, so a badly cut chunk is a wrong answer no scoring fixes.
+- **Retrieval is the ceiling on the answer.** `retrieve.ts` is TF-IDF — exact
+  word matching, so "computer" misses §5.1's "laptop". `retrieve.test.ts` pins
+  three such misses as passing tests; they should flip when embeddings land.
+- **`buildRetrievalQuery()` searches on what the claim IS, not only what it
+  says.** A form never contains the word "receipt", so §1.3 scored zero and
+  never reached the model on the first real check. These are hand-written
+  heuristics and the clause nobody thought of stays invisible — which is what
+  embeddings are for.
+- **`verifyFindings()` resolves every cited clause id against the corpus and
+  drops what doesn't resolve**, then attaches the clause text *from the corpus*.
+  A model asked to cite will cite; "§9.9" reads as authoritative as "§4.2". Never
+  let the model supply the quoted rule — a paraphrase is how "$150 per head"
+  becomes "around $150 per person".
+- **Native citations were not an option here.** They give un-fakeable character
+  offsets but are incompatible with `output_config.format` (a 400). Structured
+  findings won because a verdict has to be a field; the id-verification above is
+  what recovers the grounding.
+- **Retrieved chunks go BELOW the cache breakpoint** — they vary per form, and
+  anything varying above the breakpoint destroys the cache.
+
 - **The AI fills fields; a person submits.** Nothing in `src/ai/` dispatches to
   the reducer. Model output lands in ordinary inputs the user reviews — keep it
   that way as later phases add more.
