@@ -1606,3 +1606,142 @@ body {
   height: 32px;
   font-size: 12px;
 }
+
+/* ── Policy check (Phase 4, RAG) ─────────────────────────────────────────
+ *
+ * Advisory output sitting beside the approve/reject buttons. Deliberately
+ * quieter than they are: it informs a decision, it doesn't make one. */
+
+.policy {
+  width: 100%;
+  margin-top: 4px;
+}
+
+.policy-error {
+  margin: 10px 0 0;
+}
+
+.policy-result {
+  margin-top: 12px;
+  padding: 14px;
+  background: var(--sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.policy-summary {
+  margin: 0 0 12px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.policy-empty {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.policy-findings {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* The status palette is used here because a verdict IS a state — the same job
+ * those colours already do. It is never load-bearing: every verdict carries a
+ * glyph and a word (see VERDICT_GLYPH / VERDICT_LABEL), so the meaning
+ * survives greyscale and red/green colourblindness. The left border is the
+ * only colour-only cue, and it repeats what the label says. */
+.policy-finding {
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+}
+
+.policy-finding.verdict-violation {
+  border-left-color: var(--status-rejected);
+}
+
+.policy-finding.verdict-unclear {
+  border-left-color: var(--status-review);
+}
+
+.policy-finding.verdict-compliant {
+  border-left-color: var(--status-approved);
+}
+
+.policy-finding-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 5px;
+  font-size: 12.5px;
+}
+
+.policy-verdict {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-size: 11px;
+}
+
+.verdict-violation .policy-verdict {
+  color: var(--status-rejected-ink);
+}
+
+.verdict-unclear .policy-verdict {
+  color: var(--status-review-ink);
+}
+
+.verdict-compliant .policy-verdict {
+  color: var(--status-approved-ink);
+}
+
+.policy-clause-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.policy-clause-title {
+  color: var(--text-secondary);
+}
+
+.policy-explanation {
+  margin: 0 0 7px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+/* The policy's own words, visibly quoted rather than blended into the
+ * explanation — the distinction between what the rule says and what the model
+ * says about it is the thing an approver most needs to see. */
+.policy-quote {
+  margin: 0;
+  padding-left: 10px;
+  border-left: 2px solid var(--border-strong);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.policy-provenance {
+  margin: 12px 0 0;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.policy-dropped {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--status-review-ink);
+}

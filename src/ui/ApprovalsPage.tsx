@@ -10,6 +10,7 @@ import { decisionsBy, formsAwaiting, getStatus } from '../domain/workflow'
 import { useState } from 'react'
 import { useApp } from '../state/useApp'
 import { FormCard } from './FormCard'
+import { PolicyCheckPanel } from './PolicyCheckPanel'
 import { formatAmount } from './format'
 import { StatTiles } from './StatTiles'
 import { StatusBadge } from './StatusBadge'
@@ -50,6 +51,9 @@ export function ApprovalsPage() {
           <div className="stack">
             {awaiting.map((form) => (
               <FormCard key={form.id} form={form} showSubmitter>
+                {/* PHASE 4. Advisory only — it sits beside the decision
+                    buttons, never in front of them. */}
+                <PolicyCheckPanel form={form} />
                 <button
                   type="button"
                   className="btn btn-approve btn-small"

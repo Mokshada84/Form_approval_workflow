@@ -96,6 +96,19 @@ request.
   departments, so a stale expense type used to survive the change: the
   `<select>` showed one value while another was submitted, and a Legal form was
   saved with "Software license" on it. `coerceExpenseType()` keeps them honest.
+- **The system prompt is split into a frozen block and a varying one, in that
+  order.** `INVARIANT_RULES` (~1,250 tokens) is byte-identical for every user,
+  department and conversation and carries the `cache_control` breakpoint;
+  `departmentContext()` sits after it. Phase 1c had the department interpolated
+  into the *first* line, which meant one cache entry per department and a full
+  invalidation whenever someone cross-charged mid-conversation. **Anything that
+  varies goes after the breakpoint** — no timestamps, names or ids in the frozen
+  block, and don't filter its department list back down to one.
+  Claude Opus 5 won't cache a prefix under **512 tokens** and fails silently, so
+  don't trim that block hard. Verify with `cache_read_input_tokens` in the
+  `[extract] usage` log line: a write on turn 1 and reads after it.
+- **Don't vary `effort` or `MODEL` per request** — both invalidate the cache
+  (caches are model-scoped). They're pinned for that reason, not by accident.
 - **The Messages API is stateless.** There is no session and no conversation id;
   the browser holds the transcript (`useFormExtraction`) and resends it in full
   every turn. Input tokens therefore grow with the conversation, which is why
@@ -106,6 +119,54 @@ request.
   SIDE a bubble sits on is the primary speaker cue — not colour — with an
   `.sr-only` "You said / Assistant said" label carrying the same information
   aloud. Keep both when changing it.
+## RAG (the policy check)
+
+**The corpus is `policy/expense-policy.md` — a plain markdown file, not code.**
+A policy is written and revised by people who don't open an editor, it should
+read as a document in a pull-request diff, and changing a spending limit must
+not mean touching TypeScript. `server/policyCorpus.ts` is the only thing that
+reads it (once, at startup, resolving the path from `import.meta.url` rather
+than cwd); the tests load the same file with Vite's `?raw`. Two loaders, one
+file — they cannot drift.
+
+Because the corpus is now editable by non-developers, `retrieve.test.ts` guards
+the *document*: unique clause ids (a duplicated §number would make every
+citation resolve to the first one) and a body long enough to be worth
+retrieving.
+
+`src/policy/` holds the chunking and retrieval — pure, and taking the clause
+list as an argument rather than reaching for a module-level constant, which is
+what lets them compile in the browser project at all. `server/policyRoute.ts`
+orchestrates. The pipeline is **retrieve → generate → verify**, and the last
+step is not optional.
+
+`npm run dev:api` passes `--include ./policy/**` because `tsx watch` only
+watches modules it has *imported*, and the policy is read with `fs`. Without
+it you edit the policy, see no change, and conclude retrieval is broken.
+
+- **Chunking decides the ceiling.** `parsePolicy()` cuts on `## §N.N` headings
+  because a numbered clause is the span a human would quote. Retrieval can only
+  ever return a chunk, so a badly cut chunk is a wrong answer no scoring fixes.
+- **Retrieval is the ceiling on the answer.** `retrieve.ts` is TF-IDF — exact
+  word matching, so "computer" misses §5.1's "laptop". `retrieve.test.ts` pins
+  three such misses as passing tests; they should flip when embeddings land.
+- **`buildRetrievalQuery()` searches on what the claim IS, not only what it
+  says.** A form never contains the word "receipt", so §1.3 scored zero and
+  never reached the model on the first real check. These are hand-written
+  heuristics and the clause nobody thought of stays invisible — which is what
+  embeddings are for.
+- **`verifyFindings()` resolves every cited clause id against the corpus and
+  drops what doesn't resolve**, then attaches the clause text *from the corpus*.
+  A model asked to cite will cite; "§9.9" reads as authoritative as "§4.2". Never
+  let the model supply the quoted rule — a paraphrase is how "$150 per head"
+  becomes "around $150 per person".
+- **Native citations were not an option here.** They give un-fakeable character
+  offsets but are incompatible with `output_config.format` (a 400). Structured
+  findings won because a verdict has to be a field; the id-verification above is
+  what recovers the grounding.
+- **Retrieved chunks go BELOW the cache breakpoint** — they vary per form, and
+  anything varying above the breakpoint destroys the cache.
+
 - **The AI fills fields; a person submits.** Nothing in `src/ai/` dispatches to
   the reducer. Model output lands in ordinary inputs the user reviews — keep it
   that way as later phases add more.
