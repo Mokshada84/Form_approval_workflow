@@ -28,9 +28,9 @@ export function NewFormPage() {
   const [error, setError] = useState('')
   const [confirmation, setConfirmation] = useState('')
 
-  // PHASE 1. The free-text box and what the assistant said about its answer.
-  const [description, setDescription] = useState('')
-  const [assistantNotes, setAssistantNotes] = useState('')
+  // PHASE 1b. What's typed in the assistant's reply box right now. The
+  // conversation itself lives in the hook, not here.
+  const [reply, setReply] = useState('')
   const extraction = useFormExtraction()
 
   if (currentUser === null) return null
@@ -80,32 +80,35 @@ export function NewFormPage() {
     setReceipt(null)
     setError('')
     setConfirmation(message)
-    setDescription('')
-    setAssistantNotes('')
+    setReply('')
+    extraction.reset()
   }
 
   /**
-   * PHASE 1. Ask the server to read the description and fill the fields in.
+   * PHASE 1b. Send the next message in the conversation.
    *
-   * It FILLS, it does not submit. Everything the model produced lands in the
-   * ordinary inputs below, where the person can see it, change it, and decide
-   * whether to send it — the same fields they'd have typed themselves. That is
-   * deliberate, and it's the pattern the later phases keep: the AI drafts, a
-   * human decides. Nothing here touches the reducer.
+   * It FILLS, it does not submit. Everything the assistant establishes lands in
+   * the ordinary inputs below, where the person can see it, change it, and
+   * decide whether to send it. That is deliberate, and it's the pattern the
+   * later phases keep: the AI drafts, a human decides. Nothing here touches
+   * the reducer.
    */
-  async function handleExtract() {
-    const extracted = await extraction.run(description)
-    if (extracted === null) return
+  async function handleSend() {
+    const result = await extraction.send(reply)
+    if (result === null) return
 
-    setName(extracted.name)
-    // A null amount means the description never said — leave the field empty
-    // rather than putting a made-up number in front of someone to approve.
-    setAmount(extracted.amount === null ? '' : String(extracted.amount))
-    setDepartment(extracted.department)
-    setExpenseType(extracted.expenseType)
-    setAssistantNotes(extracted.notes)
+    setReply('')
     setError('')
     setConfirmation('')
+
+    // Fill in whatever is known SO FAR, leaving the rest alone. A null means
+    // the person hasn't said yet — and the whole point of this change is that
+    // an unknown stays visibly unknown instead of being guessed at. So a null
+    // never overwrites; it just leaves the field as it was.
+    if (result.name !== null) setName(result.name)
+    if (result.amount !== null) setAmount(String(result.amount))
+    if (result.department !== null) setDepartment(result.department)
+    if (result.expenseType !== null) setExpenseType(result.expenseType)
   }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -135,43 +138,98 @@ export function NewFormPage() {
     <form className="panel" onSubmit={handleSubmit}>
       <h2 className="panel-heading">New form</h2>
 
-      {/* PHASE 1. Optional shortcut: describe the expense and let the
-          assistant fill the fields below, which stay editable. */}
+      {/* PHASE 1b. Optional: describe the expense and answer the assistant's
+          questions until all four fields are known. It fills the fields below,
+          which stay editable — submitting is still your click. */}
       <div className="assist">
+        {/* The transcript. `role="log"` tells a screen reader that new entries
+            appear at the end, so each answer is announced as it arrives. */}
+        {extraction.messages.length > 0 && (
+          <ol className="assist-log" role="log">
+            {extraction.messages.map((message, index) => (
+              <li
+                key={index}
+                className={`assist-turn assist-turn-${message.role}`}
+              >
+                <span className="assist-who">
+                  {message.role === 'user' ? 'You' : 'Assistant'}
+                </span>
+                {message.content}
+              </li>
+            ))}
+          </ol>
+        )}
+
         <div className="field">
-          <label htmlFor="form-description">Describe it instead (optional)</label>
+          <label htmlFor="form-description">
+            {extraction.messages.length === 0
+              ? 'Describe it instead (optional)'
+              : 'Your answer'}
+          </label>
           <textarea
             id="form-description"
-            rows={3}
-            value={description}
-            onChange={(event) => setDescription(event.target.value)}
-            placeholder="e.g. Took three clients to dinner in Mumbai on Tuesday, came to about 420 dollars"
+            rows={extraction.messages.length === 0 ? 3 : 2}
+            value={reply}
+            onChange={(event) => setReply(event.target.value)}
+            placeholder={
+              extraction.messages.length === 0
+                ? 'e.g. Dinner in Hawaii with Mr. Nitin, $10000'
+                : 'Answer the question above'
+            }
           />
           <span className="field-hint">
-            Fills the fields below. You still check them and submit yourself.
+            It records only what you tell it. Anything you leave out, it asks
+            about rather than guessing.
           </span>
         </div>
 
-        <button
-          type="button"
-          className="btn btn-small"
-          // Disabled while in flight, so an impatient second click can't fire
-          // a second paid request.
-          disabled={extraction.pending || description.trim() === ''}
-          onClick={() => void handleExtract()}
-        >
-          {extraction.pending ? 'Reading…' : 'Fill the form for me'}
-        </button>
+        <div className="assist-actions">
+          <button
+            type="button"
+            className="btn btn-small"
+            // Disabled while in flight, so an impatient second click can't
+            // fire a second paid request.
+            disabled={extraction.pending || reply.trim() === ''}
+            onClick={() => void handleSend()}
+          >
+            {extraction.pending
+              ? 'Thinking…'
+              : extraction.messages.length === 0
+                ? 'Start'
+                : 'Send answer'}
+          </button>
+
+          {extraction.messages.length > 0 && (
+            <button
+              type="button"
+              className="btn btn-small"
+              disabled={extraction.pending}
+              onClick={() => {
+                extraction.reset()
+                setReply('')
+              }}
+            >
+              Start over
+            </button>
+          )}
+        </div>
 
         {extraction.error && (
           <p className="error" role="alert">
             {extraction.error}
           </p>
         )}
-        {assistantNotes && (
-          <p className="assist-note" role="status">
-            Assistant note: {assistantNotes}
+
+        {/* Everything known: say so plainly, so it's clear the questions have
+            stopped on purpose rather than the assistant having given up. */}
+        {extraction.turn !== null && extraction.turn.question === null && (
+          <p className="assist-done" role="status">
+            All four fields are filled in below. Check them and submit.
           </p>
+        )}
+
+        {extraction.turn?.notes && (
+          <p className="assist-note">Still unknown: {extraction.turn.notes}</p>
         )}
       </div>
 

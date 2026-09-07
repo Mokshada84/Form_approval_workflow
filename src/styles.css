@@ -526,6 +526,65 @@ body {
   color: var(--text-secondary);
 }
 
+/* The question-and-answer transcript. An <ol> because the order is the
+ * meaning — these are turns, not an unordered set. */
+.assist-log {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.assist-turn {
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+/* The two speakers are told apart by ALIGNMENT and background, not by colour
+ * alone — and each turn is labelled "You" or "Assistant" in text, so who said
+ * what survives being read aloud or seen without colour. */
+.assist-turn-user {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  margin-left: 24px;
+}
+
+.assist-turn-assistant {
+  background: var(--sunken);
+  border: 1px solid var(--border);
+  margin-right: 24px;
+}
+
+.assist-who {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+
+.assist-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* Brand blue, not the approved-green: green means a FORM was approved, and
+ * reusing it for "the assistant finished asking" would blur the one signal
+ * that has to stay unambiguous. */
+.assist-done {
+  margin: 12px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent-hover);
+}
+
 .routing-hint {
   margin: 0 0 16px;
   padding: 10px 14px;

@@ -1,39 +1,69 @@
 // ai/repairExtraction.ts
 //
-// PHASE 1. What the schema CAN'T guarantee.
+// PHASE 1b. What the schema CAN'T guarantee.
 //
-// A JSON schema pins down the *shape* of the answer — this field is a number,
-// that one is one of these four strings. It cannot express a relationship
-// BETWEEN fields, and "expenseType must be one of the categories belonging to
-// the chosen department" is exactly that.
-//
-// So the model can hand back a perfectly schema-valid answer that is still
-// wrong for this app: department "IT" with expense type "Filing fees". This
-// is the general lesson — structured outputs remove parsing failures, not
-// semantic ones. You still validate what comes back.
+// A JSON schema pins down the *shape* of an answer — this field is a number,
+// that one is one of these twelve strings. It cannot express a relationship
+// BETWEEN fields, and "expenseType must belong to the chosen department" is
+// exactly that. So a schema-valid answer can still be wrong for this app.
 //
 // Kept pure and separate from the network call so it can be tested without
 // spending a penny on the API.
 
 import { EXPENSE_CATEGORIES } from '../data/expenseCategories'
-import type { ExtractedForm } from './extractionSchema'
+import type { ExtractionTurn } from './extractionSchema'
+import { isComplete } from './extractionSchema'
 
 /**
- * Force `expenseType` to be a category the chosen department actually offers.
+ * Make one turn internally consistent before anyone acts on it.
  *
- * A mismatch falls back to that department's first category rather than being
- * rejected outright: the rest of the extraction is still useful, and the user
- * reviews every field before submitting anyway.
+ * Two repairs, both of which exist because the model can produce something
+ * the schema happily allows:
+ *
+ *  1. An expense type from the wrong department is discarded and ASKED about,
+ *     rather than silently swapped for a different one. Substituting a value
+ *     the person never said would be the same sin that started this — a guess
+ *     wearing the costume of an answer.
+ *  2. A turn that is missing a field but asks no question would strand the
+ *     conversation with nothing to show the user, so a question is supplied.
  */
-export function repairExtraction(extracted: ExtractedForm): ExtractedForm {
-  const allowed = EXPENSE_CATEGORIES[extracted.department]
-  if (allowed.includes(extracted.expenseType)) return extracted
+export function repairExtraction(turn: ExtractionTurn): ExtractionTurn {
+  let repaired = turn
 
-  return {
-    ...extracted,
-    expenseType: allowed[0],
-    notes: [extracted.notes, `Expense type was corrected to "${allowed[0]}".`]
-      .filter((part) => part.trim() !== '')
-      .join(' '),
+  // 1. Expense type that doesn't belong to the department.
+  if (repaired.department !== null && repaired.expenseType !== null) {
+    const allowed = EXPENSE_CATEGORIES[repaired.department]
+    if (!allowed.includes(repaired.expenseType)) {
+      repaired = {
+        ...repaired,
+        expenseType: null,
+        question: `Which ${repaired.department} expense type applies: ${allowed.join(', ')}?`,
+      }
+    }
   }
+
+  // 2. Incomplete, but nothing to ask. Falling back to a generic question
+  // keeps the dialogue alive instead of dead-ending on a half-filled form.
+  if (!isComplete(repaired) && repaired.question === null) {
+    repaired = { ...repaired, question: missingFieldQuestion(repaired) }
+  }
+
+  // 3. The mirror case: everything known, but still asking. A stray question
+  // would keep the user answering after there was nothing left to answer.
+  if (isComplete(repaired) && repaired.question !== null) {
+    repaired = { ...repaired, question: null }
+  }
+
+  return repaired
+}
+
+/** A plain question naming the first field still missing. */
+function missingFieldQuestion(turn: ExtractionTurn): string {
+  if (turn.name === null) return 'What should this expense claim be called?'
+  if (turn.amount === null) return 'What is the amount in US dollars?'
+  if (turn.department === null) {
+    return 'Which department should this be charged to: Legal, Finance, or IT?'
+  }
+  const allowed = EXPENSE_CATEGORIES[turn.department]
+  return `Which ${turn.department} expense type applies: ${allowed.join(', ')}?`
 }
