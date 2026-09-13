@@ -16,9 +16,9 @@
 // is supposed to answer HTTP requests. Indexing is a build step.
 
 import { POLICY_CLAUSES, POLICY_MARKDOWN, POLICY_PATH } from '../server/policyCorpus.ts'
-import { EMBEDDING_DIMENSIONS, EMBEDDING_MODEL, embed } from '../server/embed.ts'
+import { EMBEDDING_DIMENSIONS, EMBEDDING_MODEL, embed, embedOne } from '../server/embed.ts'
 import { INDEX_PATH, sourceHash } from '../server/policyIndex.ts'
-import { createSchema, openIndex, toBlob, writeMeta } from '../server/vectorStore.ts'
+import { createSchema, openIndex, searchByVector, toBlob, writeMeta } from '../server/vectorStore.ts'
 
 async function main() {
   console.log(`\nBuilding the policy vector index`)
@@ -50,19 +50,28 @@ async function main() {
   console.log(`   done in ${((Date.now() - started) / 1000).toFixed(1)}s`)
 
   // ---- 3. STORE ---------------------------------------------------------
-  const db = openIndex(INDEX_PATH, true)
-  createSchema(db)
-
-  const insertClause = db.prepare(
-    'insert into clauses(rowid_, clause_id, title, text) values (?, ?, ?, ?)',
-  )
-  const insertVector = db.prepare('insert into clause_vectors(rowid, embedding) values (?, ?)')
+  const db = openIndex(INDEX_PATH)
 
   // One transaction rather than 34. It is faster, and more importantly it is
   // atomic: a crash halfway leaves the old index intact instead of a half-built
   // one that looks fine and silently can't find a third of the policy.
+  //
+  // The schema rebuild goes INSIDE it for that reason. SQLite rolls back DDL
+  // like anything else — the dropped tables and the vec0 virtual table come
+  // back — and dropping outside the transaction would destroy the old index
+  // before a single new row was written, which is the case the sentence above
+  // is claiming to protect against.
   db.exec('begin')
   try {
+    createSchema(db)
+
+    // Prepared after the schema exists, and reused across all 34 rows: the
+    // statement is parsed once and only the values change.
+    const insertClause = db.prepare(
+      'insert into clauses(rowid_, clause_id, title, text) values (?, ?, ?, ?)',
+    )
+    const insertVector = db.prepare('insert into clause_vectors(rowid, embedding) values (?, ?)')
+
     POLICY_CLAUSES.forEach((clause, i) => {
       const rowid = i + 1
       insertClause.run(rowid, clause.id, clause.title, clause.text)
@@ -90,9 +99,7 @@ async function main() {
   // A smoke query using a word that appears NOWHERE in the corpus. If this
   // returns §5.1 Laptops, the index is doing the one thing keyword search
   // cannot.
-  const { embedOne } = await import('../server/embed.ts')
   const probe = await embedOne('I need a new computer for my work')
-  const { searchByVector } = await import('../server/vectorStore.ts')
   const hits = searchByVector(db, probe, 3)
 
   console.log(`\n4. smoke test — "I need a new computer" (the word "computer" is not in the policy):`)

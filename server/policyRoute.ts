@@ -36,6 +36,7 @@ import { findClause } from '../src/policy/clauses.ts'
 import { INDEX_PATH, sourceHash } from './policyIndex.ts'
 import { openVerifiedIndex } from './vectorStore.ts'
 import { hybridIds, keywordIds, vectorIds } from './retrieveHybrid.ts'
+import { warmEmbeddings } from './embed.ts'
 import type { Strategy } from './retrieveHybrid.ts'
 import { PolicyCheckSchema } from '../src/ai/policySchema.ts'
 import { verifyFindings } from '../src/ai/verifyFindings.ts'
@@ -105,13 +106,34 @@ const vectorIndex = indexStatus.ok ? indexStatus.db : null
  *
  * Set RETRIEVAL_STRATEGY=hybrid or =vector to compare them live.
  */
-const STRATEGY = (process.env.RETRIEVAL_STRATEGY ?? 'keyword') as Strategy
+const STRATEGIES: Strategy[] = ['keyword', 'vector', 'hybrid']
+
+/**
+ * Read it, don't cast it. An unchecked cast turns `RETRIEVAL_STRATEGY=vecotr`
+ * into a value that is neither 'keyword' nor 'vector', so it falls through to
+ * hybrid — and then the log, the usage line and the response all report the
+ * typo as though it were a strategy. A typo has to be loud.
+ */
+function readStrategy(value: string | undefined): Strategy {
+  if (value === undefined) return 'keyword'
+  if ((STRATEGIES as string[]).includes(value)) return value as Strategy
+  console.warn(
+    `[policy] RETRIEVAL_STRATEGY="${value}" is not one of ${STRATEGIES.join(', ')} — using keyword`,
+  )
+  return 'keyword'
+}
+
+const STRATEGY = readStrategy(process.env.RETRIEVAL_STRATEGY)
 const usingVectors = STRATEGY !== 'keyword' && vectorIndex !== null
 
 console.log(
   `[policy] retrieval: ${usingVectors ? STRATEGY : 'keyword'}` +
     (indexStatus.ok ? ' (vector index available)' : ` — ${indexStatus.reason}`),
 )
+
+// Only when vectors will actually be used: loading a 25MB model for a server
+// configured to run keyword retrieval would be pure startup cost.
+if (usingVectors) warmEmbeddings()
 
 export const policyRoute = new Hono()
 
@@ -126,11 +148,22 @@ policyRoute.post('/api/policy-check', async (c) => {
   // Hybrid where the vector index is available and current, keyword otherwise.
   // Nothing in the query is generated: retrieval must not be able to
   // hallucinate its way to a clause.
-  const ids = !usingVectors || vectorIndex === null
-    ? keywordIds(form, CLAUSE_LIMIT)
-    : STRATEGY === 'vector'
-      ? await vectorIds(vectorIndex, form, CLAUSE_LIMIT)
-      : await hybridIds(vectorIndex, form, CLAUSE_LIMIT)
+  //
+  // Wrapped because the vector paths can FAIL in ways keyword search cannot:
+  // the embedding model loads lazily on first use, and the index is a file
+  // that can be deleted or replaced while the server runs. Letting that reject
+  // out of the handler loses the log line and returns an unstructured 500.
+  let ids: string[]
+  try {
+    ids = !usingVectors || vectorIndex === null
+      ? keywordIds(form, CLAUSE_LIMIT)
+      : STRATEGY === 'vector'
+        ? await vectorIds(vectorIndex, form, CLAUSE_LIMIT)
+        : await hybridIds(vectorIndex, form, CLAUSE_LIMIT)
+  } catch (error) {
+    console.error('[policy] retrieval failed', error)
+    return c.json({ error: 'The compliance check is unavailable right now.' }, 502)
+  }
 
   const retrieved = ids.flatMap((id) => {
     const clause = findClause(POLICY_CLAUSES, id)
@@ -147,6 +180,7 @@ policyRoute.post('/api/policy-check', async (c) => {
         droppedCitations: [],
       },
       retrievedClauseIds: [],
+      strategy: usingVectors ? STRATEGY : 'keyword',
     })
   }
 

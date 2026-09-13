@@ -11,10 +11,9 @@
 // (~17s the first time, cached after) and read the index built by
 // `npm run build:index`. No API calls, so no spend either way.
 
-import { existsSync } from 'node:fs'
-import { POLICY_CLAUSES } from '../server/policyCorpus.ts'
-import { INDEX_PATH } from '../server/policyIndex.ts'
-import { openIndex } from '../server/vectorStore.ts'
+import { POLICY_CLAUSES, POLICY_MARKDOWN } from '../server/policyCorpus.ts'
+import { INDEX_PATH, sourceHash } from '../server/policyIndex.ts'
+import { openVerifiedIndex } from '../server/vectorStore.ts'
 import { EVAL_CASES } from '../src/policy/evalCases.ts'
 import type { EvalCase } from '../src/policy/evalCases.ts'
 import { scoreIds, summarise } from '../src/policy/evaluate.ts'
@@ -39,11 +38,17 @@ async function runStrategy(
 async function main() {
   console.log(`\nRetrieval eval — ${EVAL_CASES.length} cases, ${POLICY_CLAUSES.length} clauses, limit ${LIMIT}\n`)
 
-  if (!existsSync(INDEX_PATH)) {
-    console.error(`No vector index at ${INDEX_PATH}. Run \`npm run build:index\` first.\n`)
+  // The same verified open the server does, and for a sharper reason: a stale
+  // index would be measured against the CURRENT policy text that keyword
+  // search reads, so half the table would be scoring a document that no longer
+  // exists — and the comparison it prints is what the default strategy is
+  // chosen from.
+  const status = openVerifiedIndex(INDEX_PATH, sourceHash(POLICY_MARKDOWN))
+  if (!status.ok) {
+    console.error(`Cannot measure the vector strategies: ${status.reason}\n`)
     process.exit(1)
   }
-  const db = openIndex(INDEX_PATH)
+  const db = status.db
 
   const keyword = await runStrategy('keyword', async (c) => keywordIds(c.subject, LIMIT))
   const vector = await runStrategy('vector ', async (c) => vectorIds(db, c.subject, LIMIT))

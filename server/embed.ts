@@ -63,3 +63,28 @@ export async function embed(texts: string[]): Promise<Float32Array[]> {
 export async function embedOne(text: string): Promise<Float32Array> {
   return (await embed([text]))[0]
 }
+
+/**
+ * Load the model now rather than on the first request that needs it.
+ *
+ * `buildIndex.ts` argues that embedding does not belong in the path of a
+ * process meant to answer HTTP requests — and a lazy load quietly breaks that
+ * rule, just once: the first policy check after a restart pays ~17 seconds for
+ * a download and initialisation that has nothing to do with it. Whoever hits
+ * it sees a request that looks broken.
+ *
+ * Fire-and-forget on purpose. The server must start and serve keyword
+ * retrieval whether or not this succeeds, so a failure is logged and
+ * swallowed; the request path still awaits `getExtractor()` and will surface a
+ * real error there if the model genuinely cannot load.
+ */
+export function warmEmbeddings(): void {
+  const started = Date.now()
+  getExtractor()
+    .then(() => {
+      console.log(`[embed] ${EMBEDDING_MODEL} ready in ${((Date.now() - started) / 1000).toFixed(1)}s`)
+    })
+    .catch((error: unknown) => {
+      console.error('[embed] could not load the embedding model —', error)
+    })
+}

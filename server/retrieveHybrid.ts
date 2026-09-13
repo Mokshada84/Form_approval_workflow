@@ -57,10 +57,10 @@ export async function hybridIds(
   limit: number,
 ): Promise<string[]> {
   const pool = limit * 2
-  const [keyword, vector] = await Promise.all([
-    Promise.resolve(keywordIds(subject, pool)),
-    vectorIds(db, subject, pool),
-  ])
+  // Keyword is synchronous, so it is simply done first — no Promise.all
+  // theatre around a function that never yields.
+  const keyword = keywordIds(subject, pool)
+  const vector = await vectorIds(db, subject, pool)
   return reciprocalRankFusion([keyword, vector])
     .slice(0, limit)
     .map((entry) => entry.id)

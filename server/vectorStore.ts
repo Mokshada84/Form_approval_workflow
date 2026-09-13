@@ -39,12 +39,11 @@ export type VectorHit = {
  * called before loading — two separate gates, because loading arbitrary native
  * code into your database process is exactly as dangerous as it sounds.
  */
-export function openIndex(path: string, create = false): DatabaseSync {
+export function openIndex(path: string): DatabaseSync {
   const db = new DatabaseSync(path, { allowExtension: true, open: true, readOnly: false })
   db.enableLoadExtension(true)
   sqliteVec.load(db)
   db.enableLoadExtension(false)
-  if (create) createSchema(db)
   return db
 }
 
@@ -136,24 +135,39 @@ export function openVerifiedIndex(path: string, sourceHash: string): IndexStatus
     return { ok: false, reason: `no index at ${path} — run \`npm run build:index\`` }
   }
 
-  const db = openIndex(path)
-
-  const storedModel = readMeta(db, 'model')
-  if (storedModel !== EMBEDDING_MODEL) {
-    db.close()
-    return {
-      ok: false,
-      reason: `index was built with ${storedModel}, server expects ${EMBEDDING_MODEL} — rebuild it`,
-    }
+  // A file that exists is not a file that opens. An interrupted build leaves a
+  // zero-byte or half-written database, and sqlite says so by THROWING — "file
+  // is not a database", or "no such table: index_meta" one line later. The
+  // caller opens this at module scope, so an escaping error takes the whole
+  // server down over an optional index. A bad index has to read as "no index".
+  let db: DatabaseSync
+  try {
+    db = openIndex(path)
+  } catch (error) {
+    return { ok: false, reason: `could not open ${path} (${String(error)}) — rebuild it` }
   }
 
-  const storedHash = readMeta(db, 'sourceHash')
-  if (storedHash !== sourceHash) {
+  const refuse = (reason: string): IndexStatus => {
     db.close()
-    return {
-      ok: false,
-      reason: 'the policy document has changed since the index was built — run `npm run build:index`',
+    return { ok: false, reason }
+  }
+
+  try {
+    const storedModel = readMeta(db, 'model')
+    if (storedModel !== EMBEDDING_MODEL) {
+      return refuse(
+        `index was built with ${storedModel}, server expects ${EMBEDDING_MODEL} — rebuild it`,
+      )
     }
+
+    const storedHash = readMeta(db, 'sourceHash')
+    if (storedHash !== sourceHash) {
+      return refuse(
+        'the policy document has changed since the index was built — run `npm run build:index`',
+      )
+    }
+  } catch (error) {
+    return refuse(`index at ${path} is unreadable (${String(error)}) — rebuild it`)
   }
 
   return { ok: true, db }

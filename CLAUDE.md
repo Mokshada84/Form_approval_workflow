@@ -140,9 +140,13 @@ what lets them compile in the browser project at all. `server/policyRoute.ts`
 orchestrates. The pipeline is **retrieve → generate → verify**, and the last
 step is not optional.
 
-`npm run dev:api` passes `--include ./policy/**` because `tsx watch` only
-watches modules it has *imported*, and the policy is read with `fs`. Without
-it you edit the policy, see no change, and conclude retrieval is broken.
+`npm run dev:api` passes `--include "./policy/**"` because `tsx watch` only
+watches modules it has *imported*, and the policy is read with `fs`. Without it
+you edit the policy, see no change, and conclude retrieval is broken.
+**The quotes are load-bearing** — unquoted, the shell expands the glob before
+tsx sees it, `--include` swallows the first file and tsx treats the second as
+its entry point. That worked until `policy/` held more than one file, then
+broke with `ERR_UNKNOWN_FILE_EXTENSION`.
 
 - **Chunking decides the ceiling.** `parsePolicy()` cuts on `## §N.N` headings
   because a numbered clause is the span a human would quote. Retrieval can only
