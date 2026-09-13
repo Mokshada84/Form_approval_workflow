@@ -16,6 +16,7 @@ import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
 import { PORT } from './env.ts'
 import { extractRoute } from './extractRoute.ts'
+import { policyRoute } from './policyRoute.ts'
 
 const app = new Hono()
 
@@ -30,6 +31,7 @@ app.get('/api/health', (c) => c.json({ ok: true, model: 'claude-opus-5' }))
 // PHASE 1. Each capability is its own Hono app, mounted here. Routes stay one
 // per file, so adding Phase 2's streaming summary is a new file plus a line.
 app.route('/', extractRoute)
+app.route('/', policyRoute)
 
 serve({ fetch: app.fetch, port: PORT }, (info) => {
   console.log(`API server listening on http://localhost:${info.port}`)
