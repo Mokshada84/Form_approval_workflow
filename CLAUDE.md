@@ -154,6 +154,35 @@ it you edit the policy, see no change, and conclude retrieval is broken.
   to make a red test green.** Run it before and after any change to chunking,
   query building or scoring — the first version of this scored 77.3% and
   nobody knew.
+## The vector index (Phase 4c)
+
+`npm run build:index` is the **offline ingestion pipeline**: read the document →
+chunk → embed → write `policy/policy-index.db`. Indexing is a build step, never
+something the server does at boot. The index is git-ignored, so a fresh clone
+has none and **keyword retrieval must keep working** — `openVerifiedIndex()`
+returning a failure is a normal state, not an error.
+
+- **Anthropic has no embeddings endpoint.** Claude is a completion model. This
+  uses `@huggingface/transformers` with all-MiniLM-L6-v2 locally (384 dims,
+  free, no key); Voyage AI is the paid alternative Anthropic recommends.
+- **Embed queries the same way you embedded passages**, or the two vectors
+  aren't in comparable spaces. Passages are `"Title. Body"`; that choice lives
+  in `buildIndex.ts` and is mirrored in `retrieveHybrid.ts`.
+- **The index is a COPY of the document and goes stale silently.** Edit the
+  policy and an unguarded index keeps answering from the old text — worse than
+  an error, because nothing looks wrong. `sourceHash()` is stamped at build
+  time and checked at startup; a mismatch refuses the index.
+- **Fusion is Reciprocal Rank Fusion** (`src/policy/fuse.ts`, pure and tested).
+  TF-IDF scores are unbounded and higher-is-better; cosine distance is bounded
+  and lower-is-better. Blending them means inventing a normalisation *and* a
+  weight; RRF throws the scores away and keeps only the order.
+- **Keyword is the DEFAULT, and that is measured.** Over 22 cases: keyword
+  recall 95.5% / MRR 0.850; hybrid recall 89.4% / MRR 0.861; vector alone
+  recall 74.2%. Hybrid ranks the governing clause better, keyword finds more of
+  the relevant ones — and recall wins here, because a clause that isn't
+  retrieved can't be reasoned about. `RETRIEVAL_STRATEGY=hybrid|vector`
+  switches it. **Don't change the default without re-running the eval.**
+
 - **Retrieval is the ceiling on the answer.** `retrieve.ts` is TF-IDF — exact
   word matching, so "computer" misses §5.1's "laptop". `retrieve.test.ts` pins
   three such misses as passing tests; they should flip when embeddings land.

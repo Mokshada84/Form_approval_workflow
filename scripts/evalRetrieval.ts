@@ -1,43 +1,91 @@
 // scripts/evalRetrieval.ts
 //
-// PHASE 4b. `npm run eval:retrieval` — the readable report.
+// PHASE 4c. `npm run eval:retrieval` — keyword vs vector vs hybrid, on the
+// same 22 labelled cases.
 //
-// The thresholds are asserted in evaluate.test.ts so a regression fails CI;
-// this prints the detail you need when one of those assertions goes red, and
-// the per-case rows you read while trying to improve something.
+// This is what the eval was built for. "Are embeddings better?" is a claim
+// everyone makes and almost nobody measures; here it either shows up in the
+// numbers or it doesn't.
 //
-// Costs nothing to run: retrieval is a pure function, so no API call happens.
+// Keyword-only costs nothing. The vector strategies load the embedding model
+// (~17s the first time, cached after) and read the index built by
+// `npm run build:index`. No API calls, so no spend either way.
 
+import { existsSync } from 'node:fs'
 import { POLICY_CLAUSES } from '../server/policyCorpus.ts'
+import { INDEX_PATH } from '../server/policyIndex.ts'
+import { openIndex } from '../server/vectorStore.ts'
 import { EVAL_CASES } from '../src/policy/evalCases.ts'
-import { evaluateRetrieval } from '../src/policy/evaluate.ts'
+import type { EvalCase } from '../src/policy/evalCases.ts'
+import { scoreIds, summarise } from '../src/policy/evaluate.ts'
+import type { CaseResult } from '../src/policy/evaluate.ts'
+import { hybridIds, keywordIds, vectorIds } from '../server/retrieveHybrid.ts'
 
-const limit = Number(process.argv[2] ?? 6)
-const summary = evaluateRetrieval(POLICY_CLAUSES, EVAL_CASES, limit)
-
+const LIMIT = Number(process.argv[2] ?? 6)
 const pct = (value: number) => `${(value * 100).toFixed(1)}%`
 
-console.log(`\nRetrieval eval — ${EVAL_CASES.length} cases, ${POLICY_CLAUSES.length} clauses, limit ${limit}\n`)
-console.log('case                        primary  rank  recall  missing')
-console.log('─'.repeat(78))
-
-for (const result of summary.cases) {
-  const testCase = EVAL_CASES.find((c) => c.id === result.id)!
-  const rank = result.primaryRank === null ? ' MISS' : `${result.primaryRank}`.padStart(5)
-  // Flag the two shapes that matter: not found at all, and found but ranked
-  // low enough that a tighter limit would drop it.
-  const flag = result.primaryRank === null ? ' <-- not retrieved'
-    : result.primaryRank > 3 ? ' <-- ranked low'
-    : ''
-  console.log(
-    `${result.id.padEnd(26)} ${testCase.primary.padEnd(7)} ${rank}  ` +
-    `${pct(result.recall).padStart(6)}  ${result.missing.join(' ').padEnd(14)}${flag}`,
-  )
+async function runStrategy(
+  name: string,
+  get: (testCase: EvalCase) => Promise<string[]>,
+): Promise<CaseResult[]> {
+  const results: CaseResult[] = []
+  for (const testCase of EVAL_CASES) {
+    results.push(scoreIds(testCase, await get(testCase)))
+  }
+  console.log(`  ${name} done`)
+  return results
 }
 
-console.log('─'.repeat(78))
-console.log(`primary retrieved   ${pct(summary.primaryFound)}`)
-console.log(`primary ranked 1st  ${pct(summary.primaryFirst)}`)
-console.log(`mean recall@${limit}      ${pct(summary.meanRecall)}`)
-console.log(`mean precision@${limit}   ${pct(summary.meanPrecision)}`)
-console.log(`MRR                 ${summary.mrr.toFixed(3)}\n`)
+async function main() {
+  console.log(`\nRetrieval eval — ${EVAL_CASES.length} cases, ${POLICY_CLAUSES.length} clauses, limit ${LIMIT}\n`)
+
+  if (!existsSync(INDEX_PATH)) {
+    console.error(`No vector index at ${INDEX_PATH}. Run \`npm run build:index\` first.\n`)
+    process.exit(1)
+  }
+  const db = openIndex(INDEX_PATH)
+
+  const keyword = await runStrategy('keyword', async (c) => keywordIds(c.subject, LIMIT))
+  const vector = await runStrategy('vector ', async (c) => vectorIds(db, c.subject, LIMIT))
+  const hybrid = await runStrategy('hybrid ', async (c) => hybridIds(db, c.subject, LIMIT))
+
+  const table = [
+    ['keyword', summarise(keyword)] as const,
+    ['vector', summarise(vector)] as const,
+    ['hybrid', summarise(hybrid)] as const,
+  ]
+
+  console.log('\nstrategy   primary found  ranked 1st   recall   precision     MRR')
+  console.log('─'.repeat(70))
+  for (const [name, s] of table) {
+    console.log(
+      `${name.padEnd(10)} ${pct(s.primaryFound).padStart(12)} ${pct(s.primaryFirst).padStart(11)} ` +
+      `${pct(s.meanRecall).padStart(8)} ${pct(s.meanPrecision).padStart(11)} ${s.mrr.toFixed(3).padStart(7)}`,
+    )
+  }
+
+  // Per-case, but only where the strategies DISAGREE — the rows that carry
+  // information. Cases all three get right tell you nothing.
+  console.log('\ncases where the strategies differ on the governing clause:')
+  console.log('case                        want    keyword  vector  hybrid')
+  console.log('─'.repeat(70))
+  const rank = (r: CaseResult) => (r.primaryRank === null ? 'MISS' : String(r.primaryRank))
+  let differing = 0
+  EVAL_CASES.forEach((testCase, i) => {
+    const cells = [rank(keyword[i]), rank(vector[i]), rank(hybrid[i])]
+    if (new Set(cells).size === 1) return
+    differing += 1
+    console.log(
+      `${testCase.id.padEnd(26)} ${testCase.primary.padEnd(7)} ${cells[0].padStart(7)} ${cells[1].padStart(7)} ${cells[2].padStart(7)}`,
+    )
+  })
+  if (differing === 0) console.log('  (none)')
+
+  db.close()
+  console.log()
+}
+
+main().catch((error) => {
+  console.error(error)
+  process.exit(1)
+})

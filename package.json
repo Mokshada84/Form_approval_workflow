@@ -12,14 +12,17 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "eval:retrieval": "tsx scripts/evalRetrieval.ts"
+    "eval:retrieval": "tsx scripts/evalRetrieval.ts",
+    "build:index": "tsx scripts/buildIndex.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",
     "@hono/node-server": "^2.1.1",
+    "@huggingface/transformers": "^4.2.0",
     "hono": "^4.13.7",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "sqlite-vec": "^0.1.9",
     "zod": "^4.5.4"
   },
   "devDependencies": {

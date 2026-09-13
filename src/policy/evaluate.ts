@@ -46,15 +46,15 @@ export type EvalSummary = {
   mrr: number
 }
 
-export function evaluateCase(
-  clauses: PolicyClause[],
-  testCase: EvalCase,
-  limit: number,
-): CaseResult {
-  const retrieved = retrieveClauses(clauses, buildRetrievalQuery(testCase.subject), limit).map(
-    (entry) => entry.clause.id,
-  )
-
+/**
+ * Score one case against a list of retrieved ids.
+ *
+ * Split out from the retrieval itself so that ANY strategy can be scored the
+ * same way — keyword, vector or hybrid. Two strategies measured by two
+ * slightly different scorers would be an easy way to prove whatever you
+ * already believed.
+ */
+export function scoreIds(testCase: EvalCase, retrieved: string[]): CaseResult {
   const expected = [testCase.primary, ...testCase.alsoRelevant]
   const found = expected.filter((id) => retrieved.includes(id))
   const position = retrieved.indexOf(testCase.primary)
@@ -71,12 +71,22 @@ export function evaluateCase(
   }
 }
 
-export function evaluateRetrieval(
+/** Keyword retrieval for one case, then scored. */
+export function evaluateCase(
   clauses: PolicyClause[],
-  cases: EvalCase[],
-  limit = 6,
-): EvalSummary {
-  const results = cases.map((testCase) => evaluateCase(clauses, testCase, limit))
+  testCase: EvalCase,
+  limit: number,
+): CaseResult {
+  return scoreIds(
+    testCase,
+    retrieveClauses(clauses, buildRetrievalQuery(testCase.subject), limit).map(
+      (entry) => entry.clause.id,
+    ),
+  )
+}
+
+/** Roll per-case results up into the headline numbers. */
+export function summarise(results: CaseResult[]): EvalSummary {
   const mean = (values: number[]) => values.reduce((a, b) => a + b, 0) / values.length
 
   return {
@@ -87,4 +97,12 @@ export function evaluateRetrieval(
     meanPrecision: mean(results.map((r) => r.precision)),
     mrr: mean(results.map((r) => (r.primaryRank === null ? 0 : 1 / r.primaryRank))),
   }
+}
+
+export function evaluateRetrieval(
+  clauses: PolicyClause[],
+  cases: EvalCase[],
+  limit = 6,
+): EvalSummary {
+  return summarise(cases.map((testCase) => evaluateCase(clauses, testCase, limit)))
 }
