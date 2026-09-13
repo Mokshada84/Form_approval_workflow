@@ -31,8 +31,13 @@
 import { Hono } from 'hono'
 import Anthropic from '@anthropic-ai/sdk'
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod'
-import { POLICY_CLAUSES } from './policyCorpus.ts'
-import { buildRetrievalQuery, retrieveClauses } from '../src/policy/retrieve.ts'
+import { POLICY_CLAUSES, POLICY_MARKDOWN } from './policyCorpus.ts'
+import { findClause } from '../src/policy/clauses.ts'
+import { INDEX_PATH, sourceHash } from './policyIndex.ts'
+import { openVerifiedIndex } from './vectorStore.ts'
+import { hybridIds, keywordIds, vectorIds } from './retrieveHybrid.ts'
+import { warmEmbeddings } from './embed.ts'
+import type { Strategy } from './retrieveHybrid.ts'
 import { PolicyCheckSchema } from '../src/ai/policySchema.ts'
 import { verifyFindings } from '../src/ai/verifyFindings.ts'
 import { parsePolicyRequest } from '../src/ai/policyRequest.ts'
@@ -65,6 +70,71 @@ Rules:
 
 You are advising a person who decides. You are not deciding.`
 
+/**
+ * The vector index, opened once at startup, or null.
+ *
+ * NULL IS A NORMAL STATE, not an error. The index is a build artifact (`npm
+ * run build:index`) that needs a ~25MB model download, and it is git-ignored —
+ * so a fresh clone has no index and the app must still work. Keyword retrieval
+ * covers that case, and measures better on recall anyway.
+ *
+ * It is also refused when the policy document has changed since the index was
+ * built, which is the failure worth being strict about: a stale index keeps
+ * answering confidently from the previous version of the rules, and nothing
+ * looks wrong.
+ */
+const indexStatus = openVerifiedIndex(INDEX_PATH, sourceHash(POLICY_MARKDOWN))
+const vectorIndex = indexStatus.ok ? indexStatus.db : null
+
+/**
+ * Which retriever to use. KEYWORD IS THE DEFAULT, and that is a measured
+ * decision rather than a lazy one.
+ *
+ * `npm run eval:retrieval` over 22 labelled cases:
+ *
+ *   strategy   primary found  ranked 1st   recall    MRR
+ *   keyword           95.5%       77.3%     95.5%   0.850
+ *   vector            90.9%       63.6%     74.2%   0.746
+ *   hybrid            95.5%       81.8%     89.4%   0.861
+ *
+ * Hybrid ranks the governing clause better; keyword finds MORE of the relevant
+ * clauses. For this feature recall wins, because a clause that isn't retrieved
+ * can't be reasoned about at all — and it shows up in the output: on the
+ * $10,000 client dinner, hybrid ranked §4.2 first but dropped §2.1 Approval
+ * thresholds and §2.4 Pre-approval, both of which genuinely bear on a claim
+ * that size.
+ *
+ * Set RETRIEVAL_STRATEGY=hybrid or =vector to compare them live.
+ */
+const STRATEGIES: Strategy[] = ['keyword', 'vector', 'hybrid']
+
+/**
+ * Read it, don't cast it. An unchecked cast turns `RETRIEVAL_STRATEGY=vecotr`
+ * into a value that is neither 'keyword' nor 'vector', so it falls through to
+ * hybrid — and then the log, the usage line and the response all report the
+ * typo as though it were a strategy. A typo has to be loud.
+ */
+function readStrategy(value: string | undefined): Strategy {
+  if (value === undefined) return 'keyword'
+  if ((STRATEGIES as string[]).includes(value)) return value as Strategy
+  console.warn(
+    `[policy] RETRIEVAL_STRATEGY="${value}" is not one of ${STRATEGIES.join(', ')} — using keyword`,
+  )
+  return 'keyword'
+}
+
+const STRATEGY = readStrategy(process.env.RETRIEVAL_STRATEGY)
+const usingVectors = STRATEGY !== 'keyword' && vectorIndex !== null
+
+console.log(
+  `[policy] retrieval: ${usingVectors ? STRATEGY : 'keyword'}` +
+    (indexStatus.ok ? ' (vector index available)' : ` — ${indexStatus.reason}`),
+)
+
+// Only when vectors will actually be used: loading a 25MB model for a server
+// configured to run keyword retrieval would be pure startup cost.
+if (usingVectors) warmEmbeddings()
+
 export const policyRoute = new Hono()
 
 policyRoute.post('/api/policy-check', async (c) => {
@@ -75,9 +145,30 @@ policyRoute.post('/api/policy-check', async (c) => {
   const { form } = parsed.request
 
   // ---- RETRIEVE -----------------------------------------------------------
-  // The query is built from the form's own words. Nothing here is generated:
-  // the retrieval step must not be able to hallucinate its way to a clause.
-  const retrieved = retrieveClauses(POLICY_CLAUSES, buildRetrievalQuery(form), CLAUSE_LIMIT)
+  // Hybrid where the vector index is available and current, keyword otherwise.
+  // Nothing in the query is generated: retrieval must not be able to
+  // hallucinate its way to a clause.
+  //
+  // Wrapped because the vector paths can FAIL in ways keyword search cannot:
+  // the embedding model loads lazily on first use, and the index is a file
+  // that can be deleted or replaced while the server runs. Letting that reject
+  // out of the handler loses the log line and returns an unstructured 500.
+  let ids: string[]
+  try {
+    ids = !usingVectors || vectorIndex === null
+      ? keywordIds(form, CLAUSE_LIMIT)
+      : STRATEGY === 'vector'
+        ? await vectorIds(vectorIndex, form, CLAUSE_LIMIT)
+        : await hybridIds(vectorIndex, form, CLAUSE_LIMIT)
+  } catch (error) {
+    console.error('[policy] retrieval failed', error)
+    return c.json({ error: 'The compliance check is unavailable right now.' }, 502)
+  }
+
+  const retrieved = ids.flatMap((id) => {
+    const clause = findClause(POLICY_CLAUSES, id)
+    return clause === undefined ? [] : [{ clause }]
+  })
 
   if (retrieved.length === 0) {
     // Nothing matched. Saying so beats spending a request to be told nothing,
@@ -89,6 +180,7 @@ policyRoute.post('/api/policy-check', async (c) => {
         droppedCitations: [],
       },
       retrievedClauseIds: [],
+      strategy: usingVectors ? STRATEGY : 'keyword',
     })
   }
 
@@ -133,6 +225,7 @@ Receipt attached: ${form.hasReceipt ? 'yes' : 'no'}`,
     }
 
     console.log('[policy] usage', {
+      strategy: usingVectors ? STRATEGY : 'keyword',
       retrieved: retrieved.length,
       input: response.usage.input_tokens,
       cache_write: response.usage.cache_creation_input_tokens,
@@ -146,6 +239,7 @@ Receipt attached: ${form.hasReceipt ? 'yes' : 'no'}`,
     return c.json({
       check: verifyFindings(response.parsed_output, POLICY_CLAUSES),
       retrievedClauseIds: retrieved.map(({ clause }) => clause.id),
+      strategy: usingVectors ? STRATEGY : 'keyword',
     })
   } catch (error) {
     if (error instanceof Anthropic.AuthenticationError) {

@@ -162,7 +162,10 @@ describe('submitting a form', () => {
     await user.click(screen.getByRole('tab', { name: 'My forms' }))
 
     expect(screen.getByText('receipt.pdf')).toBeInTheDocument()
-    expect(screen.getByText('IT')).toBeInTheDocument()
+    // The card's meta line is a single text node — "IT · Laptop · Submitted …"
+    // — so an exact match on "IT" matches nothing. Scope to the element and
+    // match a substring, the same way status assertions scope to .status-label.
+    expect(screen.getByText(/IT/, { selector: '.form-meta' })).toBeInTheDocument()
   })
 
   it('autogenerates the form number and shows it Under review', async () => {
@@ -329,7 +332,11 @@ describe('approving and rejecting', () => {
     await signInAs(user, 'Dan Okafor')
     await user.click(screen.getByRole('tab', { name: 'My forms' }))
     expect(screen.getByText('Rejected', { selector: '.status-label' })).toBeInTheDocument()
-    expect(screen.getByText('Please attach the invoice.')).toBeInTheDocument()
+    // StageList renders "Comment: …", so the bare comment is a substring of
+    // the span rather than its whole text.
+    expect(
+      screen.getByText(/Please attach the invoice\./, { selector: '.rejection-comment' }),
+    ).toBeInTheDocument()
   })
 
   it('never puts a form in the submitter’s own approval queue', async () => {
