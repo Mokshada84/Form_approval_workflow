@@ -96,6 +96,19 @@ request.
   departments, so a stale expense type used to survive the change: the
   `<select>` showed one value while another was submitted, and a Legal form was
   saved with "Software license" on it. `coerceExpenseType()` keeps them honest.
+- **The system prompt is split into a frozen block and a varying one, in that
+  order.** `INVARIANT_RULES` (~1,250 tokens) is byte-identical for every user,
+  department and conversation and carries the `cache_control` breakpoint;
+  `departmentContext()` sits after it. Phase 1c had the department interpolated
+  into the *first* line, which meant one cache entry per department and a full
+  invalidation whenever someone cross-charged mid-conversation. **Anything that
+  varies goes after the breakpoint** — no timestamps, names or ids in the frozen
+  block, and don't filter its department list back down to one.
+  Claude Opus 5 won't cache a prefix under **512 tokens** and fails silently, so
+  don't trim that block hard. Verify with `cache_read_input_tokens` in the
+  `[extract] usage` log line: a write on turn 1 and reads after it.
+- **Don't vary `effort` or `MODEL` per request** — both invalidate the cache
+  (caches are model-scoped). They're pinned for that reason, not by accident.
 - **The Messages API is stateless.** There is no session and no conversation id;
   the browser holds the transcript (`useFormExtraction`) and resends it in full
   every turn. Input tokens therefore grow with the conversation, which is why
