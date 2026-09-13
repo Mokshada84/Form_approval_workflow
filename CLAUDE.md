@@ -147,14 +147,27 @@ it you edit the policy, see no change, and conclude retrieval is broken.
 - **Chunking decides the ceiling.** `parsePolicy()` cuts on `## §N.N` headings
   because a numbered clause is the span a human would quote. Retrieval can only
   ever return a chunk, so a badly cut chunk is a wrong answer no scoring fixes.
+- **`npm run eval:retrieval` measures retrieval against 22 labelled cases**
+  (`src/policy/evalCases.ts`), offline and free — retrieval is a pure function,
+  so no API call happens. `evaluate.test.ts` asserts floors so a regression
+  fails the build. **Raise the floors when something improves; never lower them
+  to make a red test green.** Run it before and after any change to chunking,
+  query building or scoring — the first version of this scored 77.3% and
+  nobody knew.
 - **Retrieval is the ceiling on the answer.** `retrieve.ts` is TF-IDF — exact
   word matching, so "computer" misses §5.1's "laptop". `retrieve.test.ts` pins
   three such misses as passing tests; they should flip when embeddings land.
 - **`buildRetrievalQuery()` searches on what the claim IS, not only what it
-  says.** A form never contains the word "receipt", so §1.3 scored zero and
-  never reached the model on the first real check. These are hand-written
-  heuristics and the clause nobody thought of stays invisible — which is what
-  embeddings are for.
+  says, and returns WEIGHTED terms.** A form never contains the word "receipt",
+  so §1.3 scored zero on the first real check. But unweighted, those inferred
+  terms then drowned out the claim itself — "Four nights hotel in central
+  London" found §3.2 at rank 3 from its own words and lost it entirely once
+  expansion was added. What the person wrote is weight 1; what we inferred is
+  0.3. These are hand-written heuristics and the clause nobody thought of stays
+  invisible — which is what embeddings are for.
+- **`tokenize()` strips plurals.** "Flight to Berlin" never matched §3.1's
+  "flights" — exact matching makes them different terms. Only plurals: "-ing"
+  and "-ed" mangle more than they fix, and no measurement asks for them.
 - **`verifyFindings()` resolves every cited clause id against the corpus and
   drops what doesn't resolve**, then attaches the clause text *from the corpus*.
   A model asked to cite will cite; "§9.9" reads as authoritative as "§4.2". Never

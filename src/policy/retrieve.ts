@@ -42,11 +42,37 @@ const STOPWORDS = new Set([
 ])
 
 /**
+ * Collapse a plural to its singular, crudely.
+ *
+ * The eval found this: a claim saying "Flight to Berlin" never matched §3.1,
+ * which says "all flights under six hours". Exact string matching makes
+ * "flight" and "flights" different terms, and the governing clause scored
+ * zero on the most obvious word in the query.
+ *
+ * Only plurals are stripped. Handling "-ing" and "-ed" as well would mangle
+ * more than it fixes ("meeting" -> "meet", "provided" -> "provid") and there
+ * is no evidence in the eval that it would help — so it stays out until a
+ * measurement asks for it. This is what a proper stemmer (Porter, Snowball)
+ * does thoroughly; a whole library is not worth it for one suffix.
+ */
+function singularize(term: string): string {
+  if (/^\d+$/.test(term)) return term
+  if (term.length > 4 && term.endsWith('ies')) return `${term.slice(0, -3)}y`
+  if (term.length > 4 && term.endsWith('ses')) return term.slice(0, -2)
+  // "ss" is not a plural: "business", "loss", "expenses" handled above.
+  if (term.length > 3 && term.endsWith('s') && !term.endsWith('ss')) return term.slice(0, -1)
+  return term
+}
+
+/**
  * Split text into comparable terms.
  *
  * Numbers are kept: "$1,000" becomes "1000", and an amount is often the most
  * discriminating token in a policy question. Terms shorter than three
  * characters go, except digits.
+ *
+ * Stemming happens BEFORE the stopword check, so "expenses" is collapsed to
+ * "expense" and then dropped as filler rather than surviving as a plural.
  */
 export function tokenize(text: string): string[] {
   return text
@@ -55,10 +81,31 @@ export function tokenize(text: string): string[] {
     .split(/[^a-z0-9]+/)
     .filter((term) => term !== '')
     .filter((term) => term.length >= 3 || /^\d+$/.test(term))
+    .map(singularize)
     .filter((term) => !STOPWORDS.has(term))
 }
 
 export type ScoredClause = { clause: PolicyClause; score: number }
+
+/**
+ * A search term and how much it should count.
+ *
+ * Weights exist because of a measured failure, not a hunch. Query expansion
+ * (below) adds terms like "receipt missing" and "threshold senior manager" to
+ * reach clauses the form's own words can't. Unweighted, those extra terms
+ * matched other clauses so strongly that they DROWNED OUT the claim itself:
+ * "Four nights hotel in central London" found §3.2 Accommodation at rank 3
+ * from its own words, and lost it completely once expansion was added. Same
+ * for §5.3 and a phone handset.
+ *
+ * So what the person actually wrote outranks what we inferred they meant.
+ */
+export type QueryTerm = { term: string; weight: number }
+
+/** Weight every term of a phrase equally. */
+function weigh(text: string, weight: number): QueryTerm[] {
+  return tokenize(text).map((term) => ({ term, weight }))
+}
 
 /**
  * Score every clause against the query and return the best `limit`.
@@ -69,10 +116,20 @@ export type ScoredClause = { clause: PolicyClause; score: number }
  */
 export function retrieveClauses(
   clauses: PolicyClause[],
-  query: string,
+  query: string | QueryTerm[],
   limit = 6,
 ): ScoredClause[] {
-  const queryTerms = [...new Set(tokenize(query))]
+  // A plain string is treated as all-equal weights, which keeps the simple
+  // call shape working for tests and ad-hoc queries.
+  const weighted = typeof query === 'string' ? weigh(query, 1) : query
+
+  // Deduplicate, keeping the HIGHEST weight a term was given. A word that is
+  // both in the claim and in the expansion should count as the claim's.
+  const byTerm = new Map<string, number>()
+  for (const { term, weight } of weighted) {
+    byTerm.set(term, Math.max(byTerm.get(term) ?? 0, weight))
+  }
+  const queryTerms = [...byTerm.entries()]
   if (queryTerms.length === 0) return []
 
   // Tokenise each clause once. The title is included because it is a dense,
@@ -85,7 +142,7 @@ export function retrieveClauses(
 
   const scored = documents.map(({ clause, terms }) => {
     let score = 0
-    for (const term of queryTerms) {
+    for (const [term, weight] of queryTerms) {
       const termFrequency = terms.filter((t) => t === term).length
       if (termFrequency === 0) continue
 
@@ -98,7 +155,7 @@ export function retrieveClauses(
       // Divide by clause length, or long clauses win by being long rather
       // than by being relevant. sqrt softens it: a clause twice as long is
       // penalised, but not halved.
-      score += (termFrequency * inverseDocumentFrequency) / Math.sqrt(terms.length)
+      score += (weight * termFrequency * inverseDocumentFrequency) / Math.sqrt(terms.length)
     }
     return { clause, score }
   })
@@ -142,21 +199,23 @@ export type RetrievalSubject = {
  * stays invisible. Embeddings remove the need to guess the vocabulary, which is
  * precisely what they are for.
  */
-export function buildRetrievalQuery(subject: RetrievalSubject): string {
-  const parts = [
-    subject.name,
-    subject.expenseType,
-    subject.department,
-    `${subject.amount} dollars`,
+export function buildRetrievalQuery(subject: RetrievalSubject): QueryTerm[] {
+  return [
+    // What the person actually wrote, at full weight.
+    ...weigh(subject.name, 1),
+    ...weigh(subject.expenseType, 1),
+
+    // Structured facts: real signal, but broad — "Finance" appears in clauses
+    // that have nothing to do with any particular claim.
+    ...weigh(subject.department, 0.4),
+    ...weigh(`${subject.amount} dollars`, 0.4),
+
+    // INFERRED terms, deliberately quieter than everything above. Receipt
+    // rules key off a word a form never contains, and threshold clauses are
+    // about size rather than about any word in the claim — so these have to be
+    // added, but they must not outvote the claim itself.
+    ...weigh(subject.hasReceipt ? 'itemised receipt attached' : 'receipt missing lost receipt', 0.3),
+    ...(subject.amount > 5000 ? weigh('pre-approved commitment written sign-off', 0.3) : []),
+    ...(subject.amount > 1000 ? weigh('threshold senior manager', 0.3) : []),
   ]
-
-  // Receipt rules key off the word "receipt", which a form never says.
-  parts.push(subject.hasReceipt ? 'itemised receipt attached' : 'receipt missing lost receipt')
-
-  // Approval-threshold clauses are about size, and the amount alone is a bare
-  // number that matches nothing.
-  if (subject.amount > 5000) parts.push('pre-approved commitment written sign-off')
-  if (subject.amount > 1000) parts.push('threshold senior manager')
-
-  return parts.join(' ')
 }
